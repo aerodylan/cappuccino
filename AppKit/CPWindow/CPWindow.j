@@ -1600,7 +1600,7 @@ CPTexturedBackgroundWindowMask
     if (!pasteboardTypes)
         return;
 
-    [_inclusiveRegisteredDraggedTypes minusSet:pasteboardTypes]
+    [_inclusiveRegisteredDraggedTypes minusSet:pasteboardTypes];
 
     if ([_inclusiveRegisteredDraggedTypes count] === 0)
         _inclusiveRegisteredDraggedTypes = nil;
@@ -1631,7 +1631,7 @@ CPTexturedBackgroundWindowMask
         return;
 
     [self _noteUnregisteredDraggedTypes:_registeredDraggedTypes];
-    [_registeredDraggedTypes addObjectsFromArray:pasteboardTypes]
+    [_registeredDraggedTypes addObjectsFromArray:pasteboardTypes];
     [self _noteRegisteredDraggedTypes:_registeredDraggedTypes];
 
     _registeredDraggedTypesArray = nil;
@@ -1644,7 +1644,7 @@ CPTexturedBackgroundWindowMask
 - (CPArray)registeredDraggedTypes
 {
     if (!_registeredDraggedTypesArray)
-        _registeredDraggedTypesArray = [_registeredDraggedTypes allObjects]
+        _registeredDraggedTypesArray = [_registeredDraggedTypes allObjects];
 
     return _registeredDraggedTypesArray;
 }
@@ -1942,10 +1942,16 @@ CPTexturedBackgroundWindowMask
         else
         {
             var mainMenu = [CPApp mainMenu],
-                menuWindow = mainMenu ? mainMenu._menuWindow : nil;
+                menuBarClass = objj_getClass("_CPMenuBarWindow"),
+                menuWindow;
+
             for (var i = 0; i < windowCount; i++)
             {
                 var currentWindow = allWindows[i];
+
+                if ([currentWindow isKindOfClass:menuBarClass])
+                    menuWindow = currentWindow;
+
                 if (currentWindow === self || currentWindow === menuWindow)
                     continue;
 
@@ -1971,10 +1977,16 @@ CPTexturedBackgroundWindowMask
         else
         {
             var mainMenu = [CPApp mainMenu],
-                menuWindow = mainMenu ? mainMenu._menuWindow : nil;
+                menuBarClass = objj_getClass("_CPMenuBarWindow"),
+                menuWindow;
+
             for (var i = 0; i < windowCount; i++)
             {
                 var currentWindow = allWindows[i];
+
+                if ([currentWindow isKindOfClass:menuBarClass])
+                    menuWindow = currentWindow;
+
                 if (currentWindow === self || currentWindow === menuWindow)
                     continue;
 
