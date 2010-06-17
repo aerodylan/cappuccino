@@ -71,6 +71,9 @@ CPGrooveBorder  = 3;
         _contentView = [[CPView alloc] initWithFrame:[self bounds]];
 
         [self addSubview:_contentView];
+
+        [_contentView setAutoresizesSubviews:YES];
+        [_contentView setAutoresizingMask:CPViewWidthSizable|CPViewHeightSizable];
     }
 
     return self;
@@ -164,6 +167,9 @@ CPGrooveBorder  = 3;
     [self replaceSubview:_contentView with:aView];
     
     _contentView = aView;    
+
+    [_contentView setAutoresizesSubviews:YES];
+    [_contentView setAutoresizingMask:CPViewWidthSizable|CPViewHeightSizable];
 }
 
 - (CPSize)contentViewMargins
@@ -239,6 +245,58 @@ CPGrooveBorder  = 3;
 
         default:            break;
     }
+}
+
+@end
+
+var CPBoxBorderTypeKey    = @"CPBoxBorderTypeKey",
+    CPBoxBorderColorKey   = @"CPBoxBorderColorKey",
+    CPBoxFillColorKey     = @"CPBoxFillColorKey",
+    CPBoxCornerRadiusKey  = @"CPBoxCornerRadiusKey",
+    CPBoxBorderWidthKey   = @"CPBoxBorderWidthKey",
+    CPBoxContentMarginKey = @"CPBoxContentMarginKey";
+
+@implementation CPBox (CPCoding)
+
+- (id)initWithCoder:(CPCoder)aCoder
+{
+    self = [super initWithCoder:aCoder];
+
+    if (self)
+    {
+        _borderType    = [aCoder decodeIntForKey:CPBoxBorderTypeKey];
+        
+        _borderColor   = [aCoder decodeObjectForKey:CPBoxBorderColorKey];
+        _fillColor     = [aCoder decodeObjectForKey:CPBoxFillColorKey];
+
+        _cornerRadius  = [aCoder decodeFloatForKey:CPBoxCornerRadiusKey];
+        _borderWidth   = [aCoder decodeFloatForKey:CPBoxBorderWidthKey];
+        
+        _contentMargin = [aCoder decodeSizeForKey:CPBoxContentMarginKey];
+        
+        _contentView   = [self subviews][0];
+        
+        [self setAutoresizesSubviews:YES];
+        [_contentView setAutoresizesSubviews:YES];
+        [_contentView setAutoresizingMask:CPViewWidthSizable|CPViewHeightSizable];
+    }
+
+    return self;
+}
+
+- (void)encodeWithCoder:(CPCoder)aCoder
+{
+    [super encodeWithCoder:aCoder];
+    
+    [aCoder encodeInt:_borderType forKey:CPBoxBorderTypeKey];
+    
+    [aCoder encodeObject:_borderColor forKey:CPBoxBorderColorKey];
+    [aCoder encodeObject:_fillColor forKey:CPBoxFillColorKey];
+
+    [aCoder encodeFloat:_cornerRadius forKey:CPBoxCornerRadiusKey];
+    [aCoder encodeFloat:_borderWidth forKey:CPBoxBorderWidthKey];
+    
+    [aCoder encodeSize:_contentMargin forKey:CPBoxContentMarginKey];
 }
 
 @end
