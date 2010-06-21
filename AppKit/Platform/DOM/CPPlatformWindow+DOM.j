@@ -156,6 +156,14 @@ KeyCodesToFunctionUnicodeMap[CPKeyCodes.UP]            = CPUpArrowFunctionKey;
 KeyCodesToFunctionUnicodeMap[CPKeyCodes.RIGHT]         = CPRightArrowFunctionKey;
 KeyCodesToFunctionUnicodeMap[CPKeyCodes.DOWN]          = CPDownArrowFunctionKey;
 
+var ModifierKeyCodes = [
+    CPKeyCodes.META,
+    CPKeyCodes.MAC_FF_META,
+    CPKeyCodes.CTRL,
+    CPKeyCodes.ALT,
+    CPKeyCodes.SHIFT
+];
+
 var supportsNativeDragAndDrop = [CPPlatform supportsDragAndDrop];
 
 @implementation CPPlatformWindow (DOM)
@@ -607,8 +615,8 @@ var supportsNativeDragAndDrop = [CPPlatform supportsDragAndDrop];
 - (void)keyEvent:(DOMEvent)aDOMEvent
 {
     var event,
-        timestamp = aDOMEvent.timeStamp ? aDOMEvent.timeStamp : new Date(),
-        sourceElement = (aDOMEvent.target || aDOMEvent.srcElement),
+        timestamp = aDOMEvent.timeStamp || new Date(),
+        sourceElement = aDOMEvent.target || aDOMEvent.srcElement,
         windowNumber = [[CPApp keyWindow] windowNumber],
         modifierFlags = (aDOMEvent.shiftKey ? CPShiftKeyMask : 0) |
                         (aDOMEvent.ctrlKey ? CPControlKeyMask : 0) |
@@ -627,19 +635,36 @@ var supportsNativeDragAndDrop = [CPPlatform supportsDragAndDrop];
     switch (aDOMEvent.type)
     {
         case "keydown":     // Grab and store the keycode now since it is correct and consistent at this point.
-                            if (aDOMEvent.keyCode.keyCode in MozKeyCodeToKeyCodeMap)
+                            if (aDOMEvent.keyCode in MozKeyCodeToKeyCodeMap)
                                 _keyCode = MozKeyCodeToKeyCodeMap[aDOMEvent.keyCode];
                             else
                                 _keyCode = aDOMEvent.keyCode;
 
-                            var characters = KeyCodesToFunctionUnicodeMap[_keyCode] || String.fromCharCode(_keyCode).toLowerCase();
+                            var characters;
+
+                            // Is this a special key?
+                            if (aDOMEvent.which === 0 || aDOMEvent.charCode === 0)
+                                characters = KeyCodesToFunctionUnicodeMap[_keyCode];
+
+                            if (!characters)
+                                characters = String.fromCharCode(_keyCode).toLowerCase();
+
                             overrideCharacters = (modifierFlags & CPShiftKeyMask || _capsLockActive) ? characters.toUpperCase() : characters;
 
                             // check for caps lock state
                             if (_keyCode === CPKeyCodes.CAPS_LOCK)
                                 _capsLockActive = YES;
 
-                            if (modifierFlags & (CPControlKeyMask | CPCommandKeyMask))
+                            if ([ModifierKeyCodes containsObject:_keyCode])
+                            {
+                                // A modifier key will never fire keypress. We don't need to do any other processing so we just fire it here and break.
+                                event = [CPEvent keyEventWithType:CPFlagsChanged location:location modifierFlags:modifierFlags
+                                            timestamp:timestamp windowNumber:windowNumber context:nil
+                                            characters:nil charactersIgnoringModifiers:nil isARepeat:NO keyCode:_keyCode];
+
+                                break;
+                            }
+                            else if (modifierFlags & (CPControlKeyMask | CPCommandKeyMask))
                             {
                                 //we are simply going to skip all keypress events that use cmd/ctrl key
                                 //this lets us be consistent in all browsers and send on the keydown
@@ -696,8 +721,15 @@ var supportsNativeDragAndDrop = [CPPlatform supportsDragAndDrop];
                             _lastKey = keyCode;
                             _charCodes[keyCode] = charCode;
 
-                            var characters = overrideCharacters || KeyCodesToFunctionUnicodeMap[charCode] || String.fromCharCode(charCode),
-                                charactersIgnoringModifiers = characters.toLowerCase();
+                            var characters = overrideCharacters;
+                            // Is this a special key?
+                            if (!characters && (aDOMEvent.which === 0 || aDOMEvent.charCode === 0))
+                                characters = KeyCodesToFunctionUnicodeMap[charCode];
+
+                            if (!characters)
+                                characters = String.fromCharCode(charCode);
+
+                            charactersIgnoringModifiers = characters.toLowerCase(); // FIXME: This isn't correct. It SHOULD include Shift.
 
                             // Safari won't send proper capitalization during cmd-key events
                             if (!overrideCharacters && (modifierFlags & CPCommandKeyMask) && ((modifierFlags & CPShiftKeyMask) || _capsLockActive))
@@ -705,7 +737,7 @@ var supportsNativeDragAndDrop = [CPPlatform supportsDragAndDrop];
 
                             event = [CPEvent keyEventWithType:CPKeyDown location:location modifierFlags:modifierFlags
                                         timestamp:timestamp windowNumber:windowNumber context:nil
-                                        characters:characters charactersIgnoringModifiers:charactersIgnoringModifiers isARepeat:isARepeat keyCode:keyCode];
+                                        characters:characters charactersIgnoringModifiers:charactersIgnoringModifiers isARepeat:isARepeat keyCode:charCode];
 
                             if (isNativePasteEvent)
                             {
@@ -727,6 +759,9 @@ var supportsNativeDragAndDrop = [CPPlatform supportsDragAndDrop];
                             // check for caps lock state
                             if (keyCode === CPKeyCodes.CAPS_LOCK)
                                 _capsLockActive = NO;
+
+                            if ([ModifierKeyCodes containsObject:keyCode])
+                                break;
 
                             var characters = KeyCodesToFunctionUnicodeMap[charCode] || String.fromCharCode(charCode),
                                 charactersIgnoringModifiers = characters.toLowerCase();
