@@ -287,8 +287,9 @@ CPTableColumnUserResizingMask   = 1 << 1;
         dataViewUID = [dataView UID];
 
     var x = [self tableView]._cachedDataViews[dataViewUID];
+    
     if (x && x.length)
-    return x.pop();
+        return x.pop();
 
     // if we haven't cached an archive of the data view, do it now
     if (!_dataViewData[dataViewUID])
@@ -491,7 +492,7 @@ var CPTableColumnIdentifierKey   = @"CPTableColumnIdentifierKey",
         [self setDataView:[aCoder decodeObjectForKey:CPTableColumnDataViewKey]];
         [self setHeaderView:[aCoder decodeObjectForKey:CPTableColumnHeaderViewKey]];
 
-        _resizingMask  = [aCoder decodeBoolForKey:CPTableColumnResizingMaskKey];
+        _resizingMask = [aCoder decodeBoolForKey:CPTableColumnResizingMaskKey];
         _isHidden = [aCoder decodeBoolForKey:CPTableColumnIsHiddenkey];
         
         _sortDescriptorPrototype = [aCoder decodeObjectForKey:CPSortDescriptorPrototypeKey];
