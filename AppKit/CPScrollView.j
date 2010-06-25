@@ -73,7 +73,7 @@ var CPScrollViewBorderInsetTop    = 0,
 - (id)initWithFrame:(CGRect)aFrame borderType:(CPBorderType)aBorderType
 {
     self = [super initWithFrame:aFrame];
-
+    
     if (self)
     {
         _borderType = CPNoBorder;
@@ -113,7 +113,7 @@ var CPScrollViewBorderInsetTop    = 0,
         case CPGrooveBorder:
             _borderInsets = [2.0, 2.0, 2.0, 2.0];
             
-            if (!CGRectIsEmpty([self _headerClipViewFrame]))
+            if (!_CGRectIsEmpty([self _headerClipViewFrame]))
                 ++_borderInsets[CPScrollViewBorderInsetTop];
                 
             break;
@@ -216,7 +216,7 @@ var CPScrollViewBorderInsetTop    = 0,
         }
 
         [_contentView setFrame:bounds];
-        [_headerClipView setFrame:CGRectMake(CGRectGetMinX(bounds), CGRectGetMinY(bounds), 0, 0)];
+        [_headerClipView setFrame:_CGRectMake(CGRectGetMinX(bounds), _CGRectGetMinY(bounds), 0, 0)];
 
         --_recursionCount;
 
@@ -231,9 +231,9 @@ var CPScrollViewBorderInsetTop    = 0,
     contentFrame.origin.y += headerClipViewHeight;
     contentFrame.size.height -= headerClipViewHeight;
 
-    var difference = CGSizeMake(CGRectGetWidth(documentFrame) - CGRectGetWidth(contentFrame), CGRectGetHeight(documentFrame) - CGRectGetHeight(contentFrame)),
-        verticalScrollerWidth = CGRectGetWidth([_verticalScroller frame]),
-        horizontalScrollerHeight = CGRectGetHeight([_horizontalScroller frame]),
+    var difference = CGSizeMake(CGRectGetWidth(documentFrame) - _CGRectGetWidth(contentFrame), _CGRectGetHeight(documentFrame) - _CGRectGetHeight(contentFrame)),
+        verticalScrollerWidth = _CGRectGetWidth([_verticalScroller frame]),
+        horizontalScrollerHeight = _CGRectGetHeight([_horizontalScroller frame]),
         hasVerticalScroll = difference.height > 0.0,
         hasHorizontalScroll = difference.width > 0.0,
         shouldShowVerticalScroller = _hasVerticalScroller && (!_autohidesScrollers || hasVerticalScroll),
@@ -274,15 +274,15 @@ var CPScrollViewBorderInsetTop    = 0,
 
     if (shouldShowVerticalScroller)
     {
-        var verticalScrollerY = MAX(CGRectGetMaxY([self _cornerViewFrame]), CGRectGetMaxY(headerClipViewFrame)),
-            verticalScrollerHeight = CGRectGetMaxY([self bounds]) - verticalScrollerY;
+        var verticalScrollerY = MAX(CGRectGetMaxY([self _cornerViewFrame]), _CGRectGetMaxY(headerClipViewFrame)),
+            verticalScrollerHeight = _CGRectGetMaxY([self bounds]) - verticalScrollerY;
 
         if (shouldShowHorizontalScroller)
             verticalScrollerHeight -= horizontalScrollerHeight;
 
         [_verticalScroller setFloatValue:(difference.height <= 0.0) ? 0.0 : scrollPoint.y / difference.height];
-        [_verticalScroller setKnobProportion:CGRectGetHeight(contentFrame) / CGRectGetHeight(documentFrame)];
-        [_verticalScroller setFrame:CGRectMake(CGRectGetMaxX(contentFrame), verticalScrollerY, verticalScrollerWidth, verticalScrollerHeight)];
+        [_verticalScroller setKnobProportion:_CGRectGetHeight(contentFrame) / _CGRectGetHeight(documentFrame)];
+        [_verticalScroller setFrame:_CGRectMake(CGRectGetMaxX(contentFrame), verticalScrollerY, verticalScrollerWidth, verticalScrollerHeight)];
     }
     else if (wasShowingVerticalScroller)
     {
@@ -293,8 +293,8 @@ var CPScrollViewBorderInsetTop    = 0,
     if (shouldShowHorizontalScroller)
     {
         [_horizontalScroller setFloatValue:(difference.width <= 0.0) ? 0.0 : scrollPoint.x / difference.width];
-        [_horizontalScroller setKnobProportion:CGRectGetWidth(contentFrame) / CGRectGetWidth(documentFrame)];
-        [_horizontalScroller setFrame:CGRectMake(CGRectGetMinX(contentFrame), CGRectGetMaxY(contentFrame), CGRectGetWidth(contentFrame), horizontalScrollerHeight)];
+        [_horizontalScroller setKnobProportion:_CGRectGetWidth(contentFrame) / _CGRectGetWidth(documentFrame)];
+        [_horizontalScroller setFrame:_CGRectMake(CGRectGetMinX(contentFrame), _CGRectGetMaxY(contentFrame), _CGRectGetWidth(contentFrame), horizontalScrollerHeight)];
     }
     else if (wasShowingHorizontalScroller)
     {
@@ -355,7 +355,7 @@ var CPScrollViewBorderInsetTop    = 0,
 
     if (_hasHorizontalScroller && !_horizontalScroller)
     {
-        [self setHorizontalScroller:[[CPScroller alloc] initWithFrame:CGRectMake(0.0, 0.0, MAX(CGRectGetWidth([self bounds]), [CPScroller scrollerWidth]+1), [CPScroller scrollerWidth])]];
+        [self setHorizontalScroller:[[CPScroller alloc] initWithFrame:_CGRectMake(0.0, 0.0, MAX(CGRectGetWidth([self bounds]), [CPScroller scrollerWidth]+1), [CPScroller scrollerWidth])]];
         [[self horizontalScroller] setFrameSize:CGSizeMake(CGRectGetWidth([self bounds]), [CPScroller scrollerWidth])];
     }
 
@@ -416,8 +416,8 @@ var CPScrollViewBorderInsetTop    = 0,
 
     if (_hasVerticalScroller && !_verticalScroller)
     {
-        [self setVerticalScroller:[[CPScroller alloc] initWithFrame:CGRectMake(0.0, 0.0, [CPScroller scrollerWidth], MAX(CGRectGetHeight([self bounds]), [CPScroller scrollerWidth]+1))]];
-        [[self verticalScroller] setFrameSize:CGSizeMake([CPScroller scrollerWidth], CGRectGetHeight([self bounds]))];
+        [self setVerticalScroller:[[CPScroller alloc] initWithFrame:_CGRectMake(0.0, 0.0, [CPScroller scrollerWidth], MAX(CGRectGetHeight([self bounds]), [CPScroller scrollerWidth]+1))]];
+        [[self verticalScroller] setFrameSize:CGSizeMake([CPScroller scrollerWidth], _CGRectGetHeight([self bounds]))];
     }
 
     [self reflectScrolledClipView:_contentView];
@@ -492,12 +492,12 @@ var CPScrollViewBorderInsetTop    = 0,
     var bounds = [self bounds];
     
     if (!_cornerView)
-        return CGRectMake(CGRectGetMinX(bounds), CGRectGetMinY(bounds), 0, 0);
+        return _CGRectMake(CGRectGetMinX(bounds), _CGRectGetMinY(bounds), 0, 0);
 
     var frame = [_cornerView frame];
 
-    frame.origin.x = CGRectGetMinX(bounds) + CGRectGetWidth(bounds) - CGRectGetWidth(frame);
-    frame.origin.y = CGRectGetMinY(bounds);
+    frame.origin.x = _CGRectGetMinX(bounds) + _CGRectGetWidth(bounds) - _CGRectGetWidth(frame);
+    frame.origin.y = _CGRectGetMinY(bounds);
     
     return frame;
 }
@@ -514,12 +514,12 @@ var CPScrollViewBorderInsetTop    = 0,
     if (!_borderInsets)
         return rect;
         
-    var x = CGRectGetMinX(rect) + _borderInsets[CPScrollViewBorderInsetLeft],
-        y = CGRectGetMinY(rect) + _borderInsets[CPScrollViewBorderInsetTop],
-        width = CGRectGetWidth(rect) - _borderInsets[CPScrollViewBorderInsetLeft] - _borderInsets[CPScrollViewBorderInsetRight],
-        height = CGRectGetHeight(rect) - _borderInsets[CPScrollViewBorderInsetTop] - _borderInsets[CPScrollViewBorderInsetBottom];
+    var x = _CGRectGetMinX(rect) + _borderInsets[CPScrollViewBorderInsetLeft],
+        y = _CGRectGetMinY(rect) + _borderInsets[CPScrollViewBorderInsetTop],
+        width = _CGRectGetWidth(rect) - _borderInsets[CPScrollViewBorderInsetLeft] - _borderInsets[CPScrollViewBorderInsetRight],
+        height = _CGRectGetHeight(rect) - _borderInsets[CPScrollViewBorderInsetTop] - _borderInsets[CPScrollViewBorderInsetBottom];
     
-    return CGRectMake(x, y, width, height);
+    return _CGRectMake(x, y, width, height);
 }
 
 - (void)drawRect:(CPRect)aRect
@@ -538,46 +538,46 @@ var CPScrollViewBorderInsetTop    = 0,
     {
         case CPLineBorder:
             CGContextSetStrokeColor(aContext, [CPColor blackColor]);
-            CGContextStrokeRect(aContext, CGRectInset(strokeRect, 0.5, 0.5));
+            CGContextStrokeRect(aContext, _CGRectInset(strokeRect, 0.5, 0.5));
             break;
 
         case CPBezelBorder:
             CGContextBeginPath(aContext);
             CGContextSetStrokeColor(aContext, [CPColor colorWithWhite:142.0/255.0 alpha:1.0]);
             
-            var y = CGRectGetMinY(strokeRect) + 0.5;
+            var y = _CGRectGetMinY(strokeRect) + 0.5;
             
-            CGContextMoveToPoint(aContext, CGRectGetMinX(strokeRect), y);
-            CGContextAddLineToPoint(aContext, CGRectGetMinX(strokeRect) + 1.0, y);
+            CGContextMoveToPoint(aContext, _CGRectGetMinX(strokeRect), y);
+            CGContextAddLineToPoint(aContext, _CGRectGetMinX(strokeRect) + 1.0, y);
             CGContextStrokePath(aContext);
             
             CGContextBeginPath(aContext);
             CGContextSetStrokeColor(aContext, [CPColor colorWithWhite:192.0/255.0 alpha:1.0]);
-            CGContextMoveToPoint(aContext, CGRectGetMinX(strokeRect) + 1.0, y);
-            CGContextAddLineToPoint(aContext, CGRectGetMaxX(strokeRect) - 1.0, y);
+            CGContextMoveToPoint(aContext, _CGRectGetMinX(strokeRect) + 1.0, y);
+            CGContextAddLineToPoint(aContext, _CGRectGetMaxX(strokeRect) - 1.0, y);
             CGContextStrokePath(aContext);
             
             CGContextBeginPath(aContext);
             CGContextSetStrokeColor(aContext, [CPColor colorWithWhite:142.0/255.0 alpha:1.0]);
-            CGContextMoveToPoint(aContext, CGRectGetMaxX(strokeRect) - 1.0, y);
-            CGContextAddLineToPoint(aContext, CGRectGetMaxX(strokeRect), y);
+            CGContextMoveToPoint(aContext, _CGRectGetMaxX(strokeRect) - 1.0, y);
+            CGContextAddLineToPoint(aContext, _CGRectGetMaxX(strokeRect), y);
             CGContextStrokePath(aContext);
             
             CGContextBeginPath(aContext);
             CGContextSetStrokeColor(aContext, [CPColor colorWithWhite:190.0/255.0 alpha:1.0]);
             
-            var x = CGRectGetMaxX(strokeRect) - 0.5;
+            var x = _CGRectGetMaxX(strokeRect) - 0.5;
             
-            CGContextMoveToPoint(aContext, x, CGRectGetMinY(strokeRect) + 1.0);
-            CGContextAddLineToPoint(aContext, x, CGRectGetMaxY(strokeRect));
+            CGContextMoveToPoint(aContext, x, _CGRectGetMinY(strokeRect) + 1.0);
+            CGContextAddLineToPoint(aContext, x, _CGRectGetMaxY(strokeRect));
             
-            CGContextMoveToPoint(aContext, x - 0.5, CGRectGetMaxY(strokeRect) - 0.5);
-            CGContextAddLineToPoint(aContext, CGRectGetMinX(strokeRect), CGRectGetMaxY(strokeRect) - 0.5);
+            CGContextMoveToPoint(aContext, x - 0.5, _CGRectGetMaxY(strokeRect) - 0.5);
+            CGContextAddLineToPoint(aContext, _CGRectGetMinX(strokeRect), _CGRectGetMaxY(strokeRect) - 0.5);
             
-            x = CGRectGetMinX(strokeRect) + 0.5;
+            x = _CGRectGetMinX(strokeRect) + 0.5;
             
-            CGContextMoveToPoint(aContext, x, CGRectGetMaxY(strokeRect));
-            CGContextAddLineToPoint(aContext, x, CGRectGetMinY(strokeRect) + 1.0);
+            CGContextMoveToPoint(aContext, x, _CGRectGetMaxY(strokeRect));
+            CGContextAddLineToPoint(aContext, x, _CGRectGetMinY(strokeRect) + 1.0);
             
             CGContextStrokePath(aContext);
             break;
@@ -586,46 +586,46 @@ var CPScrollViewBorderInsetTop    = 0,
             CGContextBeginPath(aContext);
             CGContextSetStrokeColor(aContext, [CPColor colorWithWhite:159.0/255.0 alpha:1.0]);
             
-            var y = CGRectGetMinY(strokeRect) + 0.5;
+            var y = _CGRectGetMinY(strokeRect) + 0.5;
             
-            CGContextMoveToPoint(aContext, CGRectGetMinX(strokeRect), y);
-            CGContextAddLineToPoint(aContext, CGRectGetMaxX(strokeRect), y);
+            CGContextMoveToPoint(aContext, _CGRectGetMinX(strokeRect), y);
+            CGContextAddLineToPoint(aContext, _CGRectGetMaxX(strokeRect), y);
             
-            var x = CGRectGetMaxX(strokeRect) - 1.5;
+            var x = _CGRectGetMaxX(strokeRect) - 1.5;
             
-            CGContextMoveToPoint(aContext, x, CGRectGetMinY(strokeRect) + 2.0);
-            CGContextAddLineToPoint(aContext, x, CGRectGetMaxY(strokeRect) - 1.0);
+            CGContextMoveToPoint(aContext, x, _CGRectGetMinY(strokeRect) + 2.0);
+            CGContextAddLineToPoint(aContext, x, _CGRectGetMaxY(strokeRect) - 1.0);
             
-            y = CGRectGetMaxY(strokeRect) - 1.5;
+            y = _CGRectGetMaxY(strokeRect) - 1.5;
             
-            CGContextMoveToPoint(aContext, CGRectGetMaxX(strokeRect) - 1.0, y);
-            CGContextAddLineToPoint(aContext, CGRectGetMinX(strokeRect) + 2.0, y);
+            CGContextMoveToPoint(aContext, _CGRectGetMaxX(strokeRect) - 1.0, y);
+            CGContextAddLineToPoint(aContext, _CGRectGetMinX(strokeRect) + 2.0, y);
             
-            x = CGRectGetMinX(strokeRect) + 0.5;
+            x = _CGRectGetMinX(strokeRect) + 0.5;
             
-            CGContextMoveToPoint(aContext, x, CGRectGetMaxY(strokeRect));
-            CGContextAddLineToPoint(aContext, x, CGRectGetMinY(strokeRect));
+            CGContextMoveToPoint(aContext, x, _CGRectGetMaxY(strokeRect));
+            CGContextAddLineToPoint(aContext, x, _CGRectGetMinY(strokeRect));
             
             CGContextStrokePath(aContext);
             
             CGContextBeginPath(aContext);
             CGContextSetStrokeColor(aContext, [CPColor whiteColor]);
             
-            var rect = CGRectInset(CGRectOffset(strokeRect, 1.0, 1.0), 0.5, 0.5);
+            var rect = _CGRectInset(CGRectOffset(strokeRect, 1.0, 1.0), 0.5, 0.5);
             
             rect.size.width -= 1.0;
             rect.size.height -= 1.0;
             CGContextStrokeRect(aContext, rect);
             
-            if (!CGRectIsEmpty([self _headerClipViewFrame]))
+            if (!_CGRectIsEmpty([self _headerClipViewFrame]))
             {
                 CGContextBeginPath(aContext);
                 CGContextSetStrokeColor(aContext, [CPColor colorWithWhite:192.0/255.0 alpha:1.0]);
             
-                y = CGRectGetMinY(strokeRect) + 2.5;
+                y = _CGRectGetMinY(strokeRect) + 2.5;
             
-                CGContextMoveToPoint(aContext, CGRectGetMinX(strokeRect) + 2.0, y);
-                CGContextAddLineToPoint(aContext, CGRectGetMaxX(strokeRect) - 2.0, y);
+                CGContextMoveToPoint(aContext, _CGRectGetMinX(strokeRect) + 2.0, y);
+                CGContextAddLineToPoint(aContext, _CGRectGetMaxX(strokeRect) - 2.0, y);
                 CGContextStrokePath(aContext);
             }
             break;
@@ -640,12 +640,12 @@ var CPScrollViewBorderInsetTop    = 0,
     var headerView = [self _headerView];
 
     if (!headerView)
-        return CGRectMakeZero();
+        return _CGRectMakeZero();
 
     var frame = [self bounds];
 
-    frame.size.height = CGRectGetHeight([headerView frame]);
-    frame.size.width -= CGRectGetWidth([self _cornerViewFrame]);
+    frame.size.height = _CGRectGetHeight([headerView frame]);
+    frame.size.width -= _CGRectGetWidth([self _cornerViewFrame]);
 
     return frame;
 }
@@ -665,16 +665,16 @@ var CPScrollViewBorderInsetTop    = 0,
         case CPScrollerIncrementLine:   contentBounds.origin.y += _verticalLineScroll;
                                         break;
 
-        case CPScrollerDecrementPage:   contentBounds.origin.y -= CGRectGetHeight(contentBounds) - _verticalPageScroll;
+        case CPScrollerDecrementPage:   contentBounds.origin.y -= _CGRectGetHeight(contentBounds) - _verticalPageScroll;
                                         break;
 
-        case CPScrollerIncrementPage:   contentBounds.origin.y += CGRectGetHeight(contentBounds) - _verticalPageScroll;
+        case CPScrollerIncrementPage:   contentBounds.origin.y += _CGRectGetHeight(contentBounds) - _verticalPageScroll;
                                         break;
 
         case CPScrollerKnobSlot:
         case CPScrollerKnob:
                                         // We want integral bounds!
-        default:                        contentBounds.origin.y = ROUND(value * (CGRectGetHeight(documentFrame) - CGRectGetHeight(contentBounds)));
+        default:                        contentBounds.origin.y = ROUND(value * (CGRectGetHeight(documentFrame) - _CGRectGetHeight(contentBounds)));
     }
 
     [_contentView scrollToPoint:contentBounds.origin];
@@ -695,16 +695,16 @@ var CPScrollViewBorderInsetTop    = 0,
         case CPScrollerIncrementLine:   contentBounds.origin.x += _horizontalLineScroll;
                                         break;
 
-        case CPScrollerDecrementPage:   contentBounds.origin.x -= CGRectGetWidth(contentBounds) - _horizontalPageScroll;
+        case CPScrollerDecrementPage:   contentBounds.origin.x -= _CGRectGetWidth(contentBounds) - _horizontalPageScroll;
                                         break;
 
-        case CPScrollerIncrementPage:   contentBounds.origin.x += CGRectGetWidth(contentBounds) - _horizontalPageScroll;
+        case CPScrollerIncrementPage:   contentBounds.origin.x += _CGRectGetWidth(contentBounds) - _horizontalPageScroll;
                                         break;
 
         case CPScrollerKnobSlot:
         case CPScrollerKnob:
                                         // We want integral bounds!
-        default:                        contentBounds.origin.x = ROUND(value * (CGRectGetWidth(documentFrame) - CGRectGetWidth(contentBounds)));
+        default:                        contentBounds.origin.x = ROUND(value * (CGRectGetWidth(documentFrame) - _CGRectGetWidth(contentBounds)));
     }
 
     [_contentView scrollToPoint:contentBounds.origin];
@@ -883,7 +883,7 @@ var CPScrollViewBorderInsetTop    = 0,
 - (void)pageDown:(id)sender
 {
     var contentBounds = [_contentView bounds];
-    [self moveByOffset:CGSizeMake(0.0, CGRectGetHeight(contentBounds) - _verticalPageScroll)];
+    [self moveByOffset:CGSizeMake(0.0, _CGRectGetHeight(contentBounds) - _verticalPageScroll)];
 }
 
 - (void)moveLeft:(id)sender
@@ -948,8 +948,10 @@ var CPScrollViewContentViewKey       = "CPScrollViewContentView",
 
         _contentView            = [aCoder decodeObjectForKey:CPScrollViewContentViewKey];
         _headerClipView         = [aCoder decodeObjectForKey:CPScrollViewHeaderClipViewKey];
-
-        if (!_headerClipView)
+        
+        var haveHeader = _headerClipView != nil;
+        
+        if (!haveHeader)
         {
             _headerClipView = [[CPClipView alloc] init];
             [self addSubview:_headerClipView];
@@ -962,13 +964,13 @@ var CPScrollViewContentViewKey       = "CPScrollViewContentView",
         _hasHorizontalScroller  = [aCoder decodeBoolForKey:CPScrollViewHasHScrollerKey];
         _autohidesScrollers     = [aCoder decodeBoolForKey:CPScrollViewAutohidesScrollerKey];
 
-        _cornerView             = [aCoder decodeObjectForKey:CPScrollViewCornerViewKey];
-
         _borderType             = [aCoder decodeIntForKey:CPScrollViewBorderTypeKey];
         
         [self _initBorderInsets];
+
+        _cornerView             = [aCoder decodeObjectForKey:CPScrollViewCornerViewKey];
         
-        if (!_cornerView)
+        if (!_cornerView && !_autohidesScrollers && haveHeader)
         {
             var documentView = [self documentView],
                 cornerView = [documentView respondsToSelector:@selector(cornerView)] ? [documentView cornerView] : nil;
@@ -977,7 +979,7 @@ var CPScrollViewContentViewKey       = "CPScrollViewContentView",
             {
                 // When autohide scrollers is off, the y coordinate can be wrong
                 var frame = [cornerView frame];
-                frame.origin.y = CGRectGetMinY([self bounds]);
+                frame.origin.y = _CGRectGetMinY([self bounds]);
                 
                 _cornerView = cornerView;
                 [_cornerView setFrame:frame];
