@@ -1275,7 +1275,7 @@ CPEnumerationReverse    = 1 << 1;
     self[otherIndex] = temporary;
 }
 
-- (CPArray)sortUsingDescriptors:(CPArray)descriptors
+- (void)sortUsingDescriptors:(CPArray)descriptors
 {
     var count = [descriptors count];
 
