@@ -298,7 +298,10 @@ CPTableColumnUserResizingMask   = 1 << 1;
     // unarchive the data view cache
     var newDataView = [CPKeyedUnarchiver unarchiveObjectWithData:_dataViewData[dataViewUID]];
     newDataView.identifier = dataViewUID;
-
+    
+    // Make sure only we have control over size
+    [newDataView setAutoresizingMask:CPViewNotSizable];
+    
     return newDataView;
 }
 
@@ -410,7 +413,7 @@ CPTableColumnUserResizingMask   = 1 << 1;
     var bindingsDictionary = [CPKeyValueBinding allBindingsForObject:self],
         keys = [bindingsDictionary allKeys];
 
-    for (var i=0, count = [keys count]; i<count; i++)
+    for (var i = 0, count = [keys count]; i < count; i++)
     {
         var bindingName = keys[i],
             bindingPath = [aDataView _replacementKeyPathForBinding:bindingName],
