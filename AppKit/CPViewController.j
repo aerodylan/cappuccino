@@ -32,7 +32,7 @@ var CPViewControllerCachedCibs;
 
     You use each instance of CPViewController to manage a single view (and hierarchy). For a simple view controller,
     this entails managing the view hierarchy responsible for presenting your application content.
-    A typical view hierarchy consists of a root viewŃa reference to which is available in the view property of this classŃ
+    A typical view hierarchy consists of a root view — a reference to which is available in the view property of this class —
     and one or more subviews presenting the actual content. In the case of navigation and tab bar controllers, the view
     controller manages not only the high-level view hierarchy (which provides the navigation controls) but also one
     or more additional view controllers that handle the presentation of the application content.
