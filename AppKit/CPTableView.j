@@ -341,6 +341,18 @@ CPTableViewFirstColumnOnlyAutoresizingStyle = 5;
     _sourceListInactiveGradient = CGGradientCreateWithColorComponents(CGColorSpaceCreateDeviceRGB(), [168.0/255.0,183.0/255.0,205.0/255.0,1.0,157.0/255.0,174.0/255.0,199.0/255.0,1.0], [0,1], 2);
     _sourceListInactiveTopLineColor = [CPColor colorWithCalibratedRed:(173.0/255.0) green:(187.0/255.0) blue:(209.0/255.0) alpha:1.0];
     _sourceListInactiveBottomLineColor = [CPColor colorWithCalibratedRed:(150.0/255.0) green:(161.0/255.0) blue:(183.0/255.0) alpha:1.0];
+
+    var count = [_tableColumns count];
+    
+    if (count > 0)
+    {
+        var descriptors = [CPArray array];
+    
+        for (var i = 0; i < count; ++i)
+            [descriptors addObject:[[_tableColumns objectAtIndex:i] sortDescriptorPrototype]];
+        
+        [self setSortDescriptors:descriptors];
+    }        
 }
 
 /*!
@@ -358,7 +370,7 @@ CPTableViewFirstColumnOnlyAutoresizingStyle = 5;
     if (!_dataSource)
         return;
 
-    var hasContentBinding = !![self infoForBinding:@"content"];
+    var hasContentBinding = [self infoForBinding:@"content"] != nil;
 
     if ([_dataSource respondsToSelector:@selector(numberOfRowsInTableView:)])
         _implementedDataSourceMethods |= CPTableViewDataSource_numberOfRowsInTableView_;
@@ -1425,7 +1437,9 @@ CPTableViewFirstColumnOnlyAutoresizingStyle = 5;
     var tableColumnRange = _tableColumnRanges[aColumn],
         rectOfRow = [self rectOfRow:aRow];
     
+    rectOfRow.size.width -= _intercellSpacing.width;
     rectOfRow.size.height -= _intercellSpacing.height;
+    
     return _CGRectMake(tableColumnRange.location, _CGRectGetMinY(rectOfRow), tableColumnRange.length, _CGRectGetHeight(rectOfRow));
 }
 
@@ -3537,6 +3551,16 @@ var CPTableViewDataSourceKey                = @"CPTableViewDataSourceKey",
 
         _headerView = [aCoder decodeObjectForKey:CPTableViewHeaderViewKey];
         _cornerView = [aCoder decodeObjectForKey:CPTableViewCornerViewKey];
+        
+        // It is possible for the _cornerView to have its origin wrong because of coordinate space swapping
+        // in nib2cib, so we fix it here.
+        if (_cornerView)
+        {
+            var frame = [_cornerView frame];
+            
+            if (_CGRectGetMinY(frame) != 0)
+                [_cornerView setFrameOrigin:_CGPointMake(_CGRectGetMinX(frame), 0.0)];
+        }
 
         _dataSource = [aCoder decodeObjectForKey:CPTableViewDataSourceKey];
         _delegate = [aCoder decodeObjectForKey:CPTableViewDelegateKey];
