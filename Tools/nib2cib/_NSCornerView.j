@@ -38,10 +38,15 @@
 - (id)initWithCoder:(CPCoder)aCoder
 {
     self =  [super NS_initWithCoder:aCoder];
+    
     if (self)
     {
         _frame.size.height = 23.0;
+        _frame.size.width = [CPScroller scrollerWidth];
         _bounds.size.height = 23.0;
+        _bounds.size.width = [CPScroller scrollerWidth];
+        
+        [self setAutoresizingMask:CPViewNotSizable];
     }
 
     return self;
