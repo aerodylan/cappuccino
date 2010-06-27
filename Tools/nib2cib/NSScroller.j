@@ -57,11 +57,10 @@
 
         _partRects = [];
 
-        // FIXME:SIZE
         if (isVertical)
-            [self setFrameSize:CGSizeMake(15.0, CGRectGetHeight([self frame]))];
+            [self setFrameSize:CGSizeMake([CPScroller scrollerWidth], CGRectGetHeight([self frame]))];
         else
-            [self setFrameSize:CGSizeMake(CGRectGetWidth([self frame]), 15.0)];
+            [self setFrameSize:CGSizeMake(CGRectGetWidth([self frame]), [CPScroller scrollerWidth])];
     }
 
     return self;
