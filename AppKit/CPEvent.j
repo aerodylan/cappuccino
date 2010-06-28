@@ -415,6 +415,14 @@ var _CPEventPeriodicEventPeriod         = 0,
     return _windowNumber;
 }
 
+/*!
+    Returns the graphics context where the event occurred
+*/
+- (CPGraphicsContext)context
+{
+    return _context;
+}
+
 // Mouse Event Information
 /*!
     Returns the button number for the mouse that generated the event.
@@ -433,6 +441,14 @@ var _CPEventPeriodicEventPeriod         = 0,
 - (int)clickCount
 {
     return _clickCount;
+}
+
+/*!
+    Returns the event mouse tracking counter
+*/
+- (int)eventNumber
+{
+    return _eventNumber;
 }
 
 /*!
