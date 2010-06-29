@@ -1267,13 +1267,13 @@ CPTableViewFirstColumnOnlyAutoresizingStyle = 5;
         else
         {
             var width = [_tableColumns[index] width] + _intercellSpacing.width;
-
+            
             _tableColumnRanges[index] = CPMakeRange(x, width);
 
             x += width;
         }
     }
-
+    
     _tableColumnRanges.length = count;
     _dirtyTableColumnRangeIndex = CPNotFound;
 }
@@ -1437,10 +1437,10 @@ CPTableViewFirstColumnOnlyAutoresizingStyle = 5;
     var tableColumnRange = _tableColumnRanges[aColumn],
         rectOfRow = [self rectOfRow:aRow];
     
-    rectOfRow.size.width -= _intercellSpacing.width;
-    rectOfRow.size.height -= _intercellSpacing.height;
-    
-    return _CGRectMake(tableColumnRange.location, _CGRectGetMinY(rectOfRow), tableColumnRange.length, _CGRectGetHeight(rectOfRow));
+    return _CGRectMake(tableColumnRange.location, 
+                       _CGRectGetMinY(rectOfRow), 
+                       tableColumnRange.length - _intercellSpacing.width, 
+                       _CGRectGetHeight(rectOfRow) - _intercellSpacing.height);
 }
 
 - (void)resizeWithOldSuperviewSize:(CGSize)aSize
