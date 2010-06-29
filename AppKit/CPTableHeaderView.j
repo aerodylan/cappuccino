@@ -57,7 +57,7 @@
     [_textField setAlignment:CPLeftTextAlignment];
     [_textField setVerticalAlignment:CPCenterVerticalTextAlignment];
     [_textField setTextShadowColor:[CPColor whiteColor]];
-    [_textField setTextShadowOffset:CGSizeMake(0,1)];
+    [_textField setTextShadowOffset:_CGSizeMake(0,1)];
 
     [self addSubview:_textField];
 }
@@ -67,13 +67,13 @@
     var themeState = [self themeState];
 
     if (themeState & CPThemeStateSelected && themeState & CPThemeStateHighlighted)
-        [self setBackgroundColor:[CPColor colorWithPatternImage:CPAppKitImage("tableview-headerview-highlighted-pressed.png", CGSizeMake(1.0, 23.0))]];
+        [self setBackgroundColor:[CPColor colorWithPatternImage:CPAppKitImage("tableview-headerview-highlighted-pressed.png", _CGSizeMake(1.0, 23.0))]];
     else if (themeState & CPThemeStateSelected)
-        [self setBackgroundColor:[CPColor colorWithPatternImage:CPAppKitImage("tableview-headerview-highlighted.png", CGSizeMake(1.0, 23.0))]];
+        [self setBackgroundColor:[CPColor colorWithPatternImage:CPAppKitImage("tableview-headerview-highlighted.png", _CGSizeMake(1.0, 23.0))]];
     else if (themeState & CPThemeStateHighlighted)
-        [self setBackgroundColor:[CPColor colorWithPatternImage:CPAppKitImage("tableview-headerview-pressed.png", CGSizeMake(1.0, 23.0))]];
+        [self setBackgroundColor:[CPColor colorWithPatternImage:CPAppKitImage("tableview-headerview-pressed.png", _CGSizeMake(1.0, 23.0))]];
     else 
-        [self setBackgroundColor:[CPColor colorWithPatternImage:CPAppKitImage("tableview-headerview.png", CGSizeMake(1.0, 23.0))]];
+        [self setBackgroundColor:[CPColor colorWithPatternImage:CPAppKitImage("tableview-headerview.png", _CGSizeMake(1.0, 23.0))]];
 }
 
 - (void)setStringValue:(CPString)string
@@ -207,7 +207,7 @@ var CPTableHeaderViewResizeZone = 3.0;
 
     _columnOldWidth = 0.0;
 
-    [self setBackgroundColor:[CPColor colorWithPatternImage:CPAppKitImage("tableview-headerview.png", CGSizeMake(1.0, 23.0))]];
+    [self setBackgroundColor:[CPColor colorWithPatternImage:CPAppKitImage("tableview-headerview.png", _CGSizeMake(1.0, 23.0))]];
 }
 
 - (id)initWithFrame:(CGRect)aFrame
@@ -229,7 +229,7 @@ var CPTableHeaderViewResizeZone = 3.0;
 
 - (int)columnAtPoint:(CGPoint)aPoint
 {
-    return [_tableView columnAtPoint:CGPointMake(aPoint.x, aPoint.y)];
+    return [_tableView columnAtPoint:_CGPointMake(aPoint.x, aPoint.y)];
 }
 
 - (CGRect)headerRectOfColumn:(int)aColumnIndex
@@ -337,10 +337,12 @@ var CPTableHeaderViewResizeZone = 3.0;
                 {
                     if (![self continueTrackingTableColumn:columnIndex at:currentLocation])
                         return; // Stop tracking the column, because it's being dragged
-                } else
+                }
+                else
                     [self startTrackingTableColumn:columnIndex at:currentLocation];
 
-            } else if (_isTrackingColumn && _pressedColumn !== -1)
+            }
+            else if (_isTrackingColumn && _pressedColumn !== -1)
                 [self stopTrackingTableColumn:_activeColumn at:currentLocation];
         }
     }
@@ -461,12 +463,12 @@ var CPTableHeaderViewResizeZone = 3.0;
     var dragWindow = [aView window],
         dragWindowFrame = [dragWindow frame];
 
-    var hoverPoint = CGPointCreateCopy(aPoint);
+    var hoverPoint = _CGPointCreateCopy(aPoint);
 
     if (aPoint.x < _previousTrackingLocation.x)
-        hoverPoint = CGPointMake(_CGRectGetMinX(dragWindowFrame), _CGRectGetMinY(dragWindowFrame));
+        hoverPoint = _CGPointMake(_CGRectGetMinX(dragWindowFrame), _CGRectGetMinY(dragWindowFrame));
     else if (aPoint.x > _previousTrackingLocation.x)
-        hoverPoint = CGPointMake(_CGRectGetMaxX(dragWindowFrame), _CGRectGetMinY(dragWindowFrame));
+        hoverPoint = _CGPointMake(_CGRectGetMaxX(dragWindowFrame), _CGRectGetMinY(dragWindowFrame));
 
     // Convert the hover point from the global coordinate system to windows' coordinate system
     hoverPoint = [[self window] convertGlobalToBase:hoverPoint];
@@ -478,7 +480,7 @@ var CPTableHeaderViewResizeZone = 3.0;
     if (hoveredColumn !== -1)
     {
         var columnRect = [self headerRectOfColumn:hoveredColumn],
-            columnCenterPoint = [self convertPoint:CGPointMake(_CGRectGetMidX(columnRect), _CGRectGetMidY(columnRect)) fromView:self];
+            columnCenterPoint = [self convertPoint:_CGPointMake(_CGRectGetMidX(columnRect), _CGRectGetMidY(columnRect)) fromView:self];
         if (hoveredColumn < _activeColumn && hoverPoint.x < columnCenterPoint.x)
             [self _moveColumn:_activeColumn toColumn:hoveredColumn];
         else if (hoveredColumn > _activeColumn && hoverPoint.x > columnCenterPoint.x)
@@ -524,7 +526,8 @@ var CPTableHeaderViewResizeZone = 3.0;
 - (void)continueResizingTableColumn:(int)aColumnIndex at:(CPPoint)aPoint
 {
     var tableColumn = [[_tableView tableColumns] objectAtIndex:aColumnIndex],
-        newWidth = [tableColumn width] + aPoint.x - _previousTrackingLocation.x,
+        delta = aPoint.x - _previousTrackingLocation.x,
+        newWidth = [tableColumn width] + delta,
         minWidth = [tableColumn minWidth],
         maxWidth = [tableColumn maxWidth];
         
@@ -534,9 +537,14 @@ var CPTableHeaderViewResizeZone = 3.0;
         [[CPCursor resizeLeftCursor] set];
     else
     {
-        var columnX = _CGRectGetMinX([_tableView rectOfColumn:aColumnIndex]);
-        
-        if (aPoint.x >= (columnX + minWidth) && aPoint.x <= (columnX + maxWidth))
+        var columnRect = [_tableView rectOfColumn:aColumnIndex],
+            columnMinX = _CGRectGetMinX(columnRect),
+            columnMaxX = _CGRectGetMaxX(columnRect);
+           
+        // Don't resize unless the cursor is within min/max and has reached the column edge 
+        if (aPoint.x >= (columnMinX + minWidth) && 
+            aPoint.x <= (columnMinX + maxWidth) &&
+            ((delta > 0 && aPoint.x > columnMaxX) || (delta < 0 && aPoint.x < columnMaxX)))
         {
             _tableView._lastColumnShouldSnap = NO;
             [tableColumn setWidth:newWidth];
