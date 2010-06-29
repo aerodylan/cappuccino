@@ -226,7 +226,7 @@ var CPScrollViewBorderInsetTop    = 0,
     var documentFrame = [documentView frame], // the size of the whole document
         contentFrame = bounds, // assume it takes up the entire size of the scrollview (no scrollers)
         headerClipViewFrame = [self _headerClipViewFrame],
-        headerClipViewHeight = headerClipViewFrame.size.height;
+        headerClipViewHeight = _CGRectGetHeight(headerClipViewFrame);
 
     contentFrame.origin.y += headerClipViewHeight;
     contentFrame.size.height -= headerClipViewHeight;
@@ -255,6 +255,8 @@ var CPScrollViewBorderInsetTop    = 0,
     }
 
     // We now definitively know which scrollers are shown or not, as well as whether they are showing scroll values.
+    [_cornerView setHidden:!shouldShowVerticalScroller];
+
     [_verticalScroller setHidden:!shouldShowVerticalScroller];
     [_verticalScroller setEnabled:hasVerticalScroll];
 
@@ -303,8 +305,10 @@ var CPScrollViewBorderInsetTop    = 0,
     }
 
     [_contentView setFrame:contentFrame];
-    [_headerClipView setFrame:headerClipViewFrame];
     [_cornerView setFrame:[self _cornerViewFrame]];
+    
+    // Call _headerClipViewFrame again because _cornerView visibility may have changed
+    [_headerClipView setFrame:[self _headerClipViewFrame]];
 
     --_recursionCount;
 }
@@ -645,7 +649,9 @@ var CPScrollViewBorderInsetTop    = 0,
     var frame = [self bounds];
 
     frame.size.height = _CGRectGetHeight([headerView frame]);
-    frame.size.width -= _CGRectGetWidth([self _cornerViewFrame]);
+    
+    if (![_cornerView isHidden])
+        frame.size.width -= _CGRectGetWidth([self _cornerViewFrame]);
 
     return frame;
 }
@@ -977,7 +983,8 @@ var CPScrollViewContentViewKey       = "CPScrollViewContentView",
                 
             if (cornerView)
             {
-                // When autohide scrollers is off, the y coordinate can be wrong
+                // When autohide scrollers is off, the y coordinate can be wrong because
+                // of coordinate swapping in nib2cib.
                 var frame = [cornerView frame];
                 frame.origin.y = _CGRectGetMinY([self bounds]);
                 
