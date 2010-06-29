@@ -62,13 +62,6 @@
     [self addSubview:_textField];
 }
 
-- (void)viewDidMoveToWindow
-{
-    [super viewDidMoveToWindow];
-    
-    [[self window] setAcceptsMouseMovedEvents:YES];
-}
-
 - (void)layoutSubviews
 {
     var themeState = [self themeState];
@@ -126,6 +119,27 @@
 	}
 }
 
+- (void)drawRect:(CGRect)aRect
+{
+    var bounds = [self bounds];
+    
+    if (!CGRectIntersectsRect(aRect, bounds))
+        return;
+        
+    var context = [[CPGraphicsContext currentContext] graphicsPort],
+        maxX = _CGRectGetMaxX(bounds) - 0.5;
+
+    CGContextSetLineWidth(context, 1);
+    CGContextSetStrokeColor(context, [CPColor colorWithWhite:192.0/255.0 alpha:1.0]);
+    
+    CGContextBeginPath(context);
+    
+    CGContextMoveToPoint(context, maxX, _CGRectGetMinY(bounds));
+    CGContextAddLineToPoint(context, maxX, _CGRectGetMaxY(bounds));
+    
+    CGContextStrokePath(context);
+}
+
 @end
 
 var _CPTableColumnHeaderViewStringValueKey = @"_CPTableColumnHeaderViewStringValueKey",
@@ -158,12 +172,14 @@ var _CPTableColumnHeaderViewStringValueKey = @"_CPTableColumnHeaderViewStringVal
 
 @end
 
-var CPTableHeaderViewResizeZone = 5.0;
+var CPTableHeaderViewResizeZone = 3.0;
 
 @implementation CPTableHeaderView : CPView
 {
     CPPoint     _mouseDownLocation;
+    CPPoint     _mouseEnterExitLocation;
     CPPoint     _previousTrackingLocation;
+    
     int         _activeColumn;
     int         _pressedColumn;
                 
@@ -179,7 +195,9 @@ var CPTableHeaderViewResizeZone = 5.0;
 - (void)_init
 {
     _mouseDownLocation = CPPointMakeZero();
+    _mouseEnterExitLocation = CPPointMakeZero();
     _previousTrackingLocation = CPPointMakeZero();
+    
     _activeColumn = -1;
     _pressedColumn = -1;
 
@@ -200,6 +218,13 @@ var CPTableHeaderViewResizeZone = 5.0;
         [self _init];
 
     return self;
+}
+
+- (void)viewDidMoveToWindow
+{
+    [super viewDidMoveToWindow];
+    
+    [[self window] setAcceptsMouseMovedEvents:YES];
 }
 
 - (int)columnAtPoint:(CGPoint)aPoint
@@ -499,20 +524,27 @@ var CPTableHeaderViewResizeZone = 5.0;
 - (void)continueResizingTableColumn:(int)aColumnIndex at:(CPPoint)aPoint
 {
     var tableColumn = [[_tableView tableColumns] objectAtIndex:aColumnIndex],
-        newWidth = [tableColumn width] + aPoint.x - _previousTrackingLocation.x;
-
-    if (newWidth < [tableColumn minWidth])
+        newWidth = [tableColumn width] + aPoint.x - _previousTrackingLocation.x,
+        minWidth = [tableColumn minWidth],
+        maxWidth = [tableColumn maxWidth];
+        
+    if (newWidth < minWidth)
         [[CPCursor resizeRightCursor] set];
-    else if (newWidth > [tableColumn maxWidth])
+    else if (newWidth > maxWidth)
         [[CPCursor resizeLeftCursor] set];
     else
     {
-        _tableView._lastColumnShouldSnap = NO;
-        [tableColumn setWidth:newWidth];
+        var columnX = _CGRectGetMinX([_tableView rectOfColumn:aColumnIndex]);
+        
+        if (aPoint.x >= (columnX + minWidth) && aPoint.x <= (columnX + maxWidth))
+        {
+            _tableView._lastColumnShouldSnap = NO;
+            [tableColumn setWidth:newWidth];
 
-        [[CPCursor resizeLeftRightCursor] set];
-        [self setNeedsLayout];
-        [self setNeedsDisplay:YES];
+            [[CPCursor resizeLeftRightCursor] set];
+            [self setNeedsLayout];
+            [self setNeedsDisplay:YES];
+        }
     }
 }
 
@@ -557,6 +589,13 @@ var CPTableHeaderViewResizeZone = 5.0;
 
 - (void)mouseEntered:(CPEvent)theEvent
 {
+    var location = [theEvent globalLocation];
+    
+    if (_CGPointEqualToPoint(location, _mouseEnterExitLocation))
+        return;
+        
+    _mouseEnterExitLocation = location;
+    
     [self _updateResizeCursor:theEvent];
 }
 
@@ -567,6 +606,13 @@ var CPTableHeaderViewResizeZone = 5.0;
 
 - (void)mouseExited:(CPEvent)theEvent
 {
+    var location = [theEvent globalLocation];
+    
+    if (_CGPointEqualToPoint(location, _mouseEnterExitLocation))
+        return;
+        
+    _mouseEnterExitLocation = location;
+    
     // FIXME: we should use CPCursor push/pop (if previous currentCursor != arrow).
     [[CPCursor arrowCursor] set];
 }
@@ -579,17 +625,9 @@ var CPTableHeaderViewResizeZone = 5.0;
     for (var i = 0; i < count; i++) 
     {
         var column = [tableColumns objectAtIndex:i],
-            headerView = [column headerView];
-
-        var frame = [self headerRectOfColumn:i];
-        frame.size.height -= 0.5;
+            headerView = [column headerView],
+            frame = [self headerRectOfColumn:i];
         
-        if (i > 0) 
-        {
-            frame.origin.x += 0.5;
-            frame.size.width -= 1;
-        }
-
         [headerView setFrame:frame];
 
         if ([headerView superview] != self)
@@ -602,41 +640,10 @@ var CPTableHeaderViewResizeZone = 5.0;
     if (!_tableView)
         return;
 
-    var context = [[CPGraphicsContext currentContext] graphicsPort],
-        exposedColumnIndexes = [_tableView columnIndexesInRect:aRect],
-        columnsArray = [],
-        tableColumns = [_tableView tableColumns],
-        exposedTableColumns = _tableView._exposedColumns,
-        firstIndex = [exposedTableColumns firstIndex],
-        exposedRange = CPMakeRange(firstIndex, [exposedTableColumns lastIndex] - firstIndex + 1);
-
-    CGContextSetLineWidth(context, 1);
-    CGContextSetStrokeColor(context, [CPColor colorWithWhite:192.0/255.0 alpha:1.0]);
-
-    [exposedColumnIndexes getIndexes:columnsArray maxCount:-1 inIndexRange:exposedRange];
-
-    var columnArrayIndex = 0,
-        columnArrayCount = columnsArray.length,
-        columnMaxX;
-
-    CGContextBeginPath(context);
-    
-    for (; columnArrayIndex < columnArrayCount; columnArrayIndex++)
-    {
-        // grab each column rect and add vertical lines
-        var columnIndex = columnsArray[columnArrayIndex],
-            columnToStroke = [self headerRectOfColumn:columnIndex];
-
-        columnMaxX = _CGRectGetMaxX(columnToStroke);
-
-        CGContextMoveToPoint(context, ROUND(columnMaxX) + 0.5, ROUND(_CGRectGetMinY(columnToStroke)));
-        CGContextAddLineToPoint(context, ROUND(columnMaxX) + 0.5, ROUND(_CGRectGetMaxY(columnToStroke)));
-    }
-
-    CGContextStrokePath(context);
-
     if (_isDragging)
     {
+        var context = [[CPGraphicsContext currentContext] graphicsPort];
+        
         CGContextSetFillColor(context, [CPColor grayColor]);
         CGContextFillRect(context, [self headerRectOfColumn:_activeColumn])
     }

@@ -1269,7 +1269,7 @@ CPTableViewFirstColumnOnlyAutoresizingStyle = 5;
             var width = [_tableColumns[index] width] + _intercellSpacing.width;
             
             _tableColumnRanges[index] = CPMakeRange(x, width);
-
+            
             x += width;
         }
     }
@@ -2704,24 +2704,8 @@ CPTableViewFirstColumnOnlyAutoresizingStyle = 5;
         
         if (highlightingColumns)
         {
-            if (hasHorizontalSpacing)
-            {
-                if (index > 0)
-                {
-                    ++rect.origin.x;
-                    --rect.size.width;
-                }
-                    
-                if (index == lastColumnIndex)
-                    ++rect.size.width;
-            }
-            else
-            {
-                if (index > 0)
-                    rect = _CGRectOffset(rect, 1.0, 0.0);
-                else
-                    ++rect.size.width;
-            }
+            if (hasHorizontalSpacing && index != lastColumnIndex)
+                --rect.size.width;
         }
         else
         {
