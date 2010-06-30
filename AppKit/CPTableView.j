@@ -2692,7 +2692,7 @@ CPTableViewFirstColumnOnlyAutoresizingStyle = 5;
         hasHorizontalGrid = _gridStyleMask & CPTableViewSolidHorizontalGridLineMask,
         hasHorizontalSpacing = _intercellSpacing.width > 0,
         lastColumnIndex = [self numberOfColumns] - 1,
-        affectedRect = nil;
+        affectedRect = CGRectNull;
 
     CGContextSetFillColor(context, _selectionHighlightColor);
     CGContextBeginPath(context);
@@ -2714,11 +2714,7 @@ CPTableViewFirstColumnOnlyAutoresizingStyle = 5;
         }
         
         CGContextAddRect(context, rect);
-        
-        if (affectedRect)
-            affectedRect = CGRectUnion(affectedRect, rect);
-        else
-            affectedRect = _CGRectMakeCopy(rect);        
+        affectedRect = CGRectUnion(affectedRect, rect);
 
         if (drawGradient)
         {
