@@ -282,12 +282,9 @@ var CPTableHeaderViewResizeZone = 3.0;
 {
     var type = [theEvent type],
         currentLocation = [self convertPoint:[theEvent locationInWindow] fromView:nil];
-
-    // Take the right columns resize tracking area into account
-    currentLocation.x -= CPTableHeaderViewResizeZone;
-
+        
     var columnIndex = [self columnAtPoint:currentLocation],
-        shouldResize = [self shouldResizeTableColumn:columnIndex at:CPPointMake(currentLocation.x + CPTableHeaderViewResizeZone, currentLocation.y)];
+        shouldResize = [self shouldResizeTableColumn:columnIndex at:CPPointMake(currentLocation.x, currentLocation.y)];
 
     if (type === CPLeftMouseUp)
     {
@@ -297,12 +294,11 @@ var CPTableHeaderViewResizeZone = 3.0;
         {
             [_tableView _didClickTableColumn:columnIndex modifierFlags:[theEvent modifierFlags]];
             [self stopTrackingTableColumn:columnIndex at:currentLocation];
-
-            _isTrackingColumn = NO;
         }
 
         [self _updateResizeCursor:[CPApp currentEvent]];
 
+        _isTrackingColumn = NO;
         _activeColumn = CPNotFound;
         return;
     }
@@ -379,8 +375,9 @@ var CPTableHeaderViewResizeZone = 3.0;
 
 - (BOOL)_shouldStopTrackingTableColumn:(int)aColumnIndex at:(CPPoint)aPoint
 {
-    return _isTrackingColumn && _activeColumn === aColumnIndex && 
-        _CGRectContainsPoint([self headerRectOfColumn:aColumnIndex], aPoint);
+    return _isTrackingColumn && 
+           _activeColumn === aColumnIndex && 
+           _CGRectContainsPoint([self headerRectOfColumn:aColumnIndex], aPoint);
 }
 
 - (void)stopTrackingTableColumn:(int)aColumnIndex at:(CPPoint)aPoint
@@ -527,9 +524,10 @@ var CPTableHeaderViewResizeZone = 3.0;
 {
     var tableColumn = [[_tableView tableColumns] objectAtIndex:aColumnIndex],
         delta = aPoint.x - _previousTrackingLocation.x,
-        newWidth = [tableColumn width] + delta,
-        minWidth = [tableColumn minWidth],
-        maxWidth = [tableColumn maxWidth];
+        spacing = [_tableView intercellSpacing].width,
+        newWidth = [tableColumn width] + spacing + delta,
+        minWidth = [tableColumn minWidth] + spacing,
+        maxWidth = [tableColumn maxWidth] + spacing;
         
     if (newWidth < minWidth)
         [[CPCursor resizeRightCursor] set];
@@ -540,14 +538,14 @@ var CPTableHeaderViewResizeZone = 3.0;
         var columnRect = [_tableView rectOfColumn:aColumnIndex],
             columnMinX = _CGRectGetMinX(columnRect),
             columnMaxX = _CGRectGetMaxX(columnRect);
-           
+        
         // Don't resize unless the cursor is within min/max and has reached the column edge 
         if (aPoint.x >= (columnMinX + minWidth) && 
             aPoint.x <= (columnMinX + maxWidth) &&
             ((delta > 0 && aPoint.x > columnMaxX) || (delta < 0 && aPoint.x < columnMaxX)))
         {
             _tableView._lastColumnShouldSnap = NO;
-            [tableColumn setWidth:newWidth];
+            [tableColumn setWidth:newWidth - spacing];
 
             [[CPCursor resizeLeftRightCursor] set];
             [self setNeedsLayout];
@@ -582,11 +580,12 @@ var CPTableHeaderViewResizeZone = 3.0;
     if (overColumn >= 0 && _CGRectContainsPoint([self _cursorRectForColumn:overColumn], mouseLocation))
     {
         var tableColumn = [[_tableView tableColumns] objectAtIndex:overColumn],
-            width = [tableColumn width];
+            spacing = [_tableView intercellSpacing].width,
+            width = [tableColumn width] + spacing,
 
-        if (width == [tableColumn minWidth])
+        if (width == [tableColumn minWidth] + spacing)
             [[CPCursor resizeRightCursor] set];
-        else if (width == [tableColumn maxWidth])
+        else if (width == [tableColumn maxWidth] + spacing)
             [[CPCursor resizeLeftCursor] set];
         else
             [[CPCursor resizeLeftRightCursor] set];
