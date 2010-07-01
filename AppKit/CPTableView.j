@@ -901,6 +901,22 @@ var CPTableViewDefaultRowHeight = 23.0;
     [self _noteSelectionDidChange];
 }
 
+- (void)_setSelectedRowIndexes:(CPIndexSet)rows
+{
+    var previousSelectedIndexes = [_selectedRowIndexes copy];
+
+    _lastSelectedRow = ([rows count] > 0) ? [rows lastIndex] : -1;
+    _selectedRowIndexes = [rows copy];
+
+    [self _updateHighlightWithOldRows:previousSelectedIndexes newRows:_selectedRowIndexes];
+    [_tableDrawView display]; // FIXME: should be setNeedsDisplayInRect:enclosing rect of new (de)selected rows
+                              // but currently -drawRect: is not implemented here
+
+    [[CPKeyValueBinding getBinding:@"selectionIndexes" forObject:self] reverseSetValueFor:@"selectedRowIndexes"];
+
+    [self _noteSelectionDidChange];
+}
+
 /*!
     Sets the row selection using indexes.
     @param rows a CPIndexSet of rows to select
@@ -924,20 +940,16 @@ var CPTableViewDefaultRowHeight = 23.0;
             [_headerView setNeedsDisplay:YES];
     }
 
-    var previousSelectedIndexes = [_selectedRowIndexes copy];
-
+    var newSelectedIndexes;
     if (shouldExtendSelection)
-        [_selectedRowIndexes addIndexes:rows];
+    {
+        newSelectedIndexes = [_selectedRowIndexes copy];
+        [newSelectedIndexes addIndexes:rows];
+    }
     else
-        _selectedRowIndexes = [rows copy];
+        newSelectedIndexes = [rows copy];
 
-    // update last selected row
-    _lastSelectedRow = ([rows count] > 0) ? [rows lastIndex] : -1;
-
-    [self _updateHighlightWithOldRows:previousSelectedIndexes newRows:_selectedRowIndexes];
-    [_tableDrawView display]; // FIXME: should be setNeedsDisplayInRect:enclosing rect of new (de)selected rows
-                              // but currently -drawRect: is not implemented here
-    [self _noteSelectionDidChange];
+    [self _setSelectedRowIndexes:newSelectedIndexes];
 }
 
 - (void)_updateHighlightWithOldRows:(CPIndexSet)oldRows newRows:(CPIndexSet)newRows
@@ -3459,14 +3471,23 @@ var CPTableViewDefaultRowHeight = 23.0;
 
 @implementation CPTableView (Bindings)
 
+- (CPString)_replacementKeyPathForBinding:(CPString)aBinding
+{
+    if (aBinding === @"selectionIndexes")
+        return @"selectedRowIndexes";
+
+    return [super _replacementKeyPathForBinding:aBinding];
+}
+
 - (void)_establishBindingsIfUnbound:(id)destination
 {
     if ([[self infoForBinding:@"content"] objectForKey:CPObservedObjectKey] !== destination)
-    {
         [self bind:@"content" toObject:destination withKeyPath:@"arrangedObjects" options:nil];
-        //[self bind:@"sortDescriptors" toObject:destination withKeyPath:@"sortDescriptors" options:nil];
-        //[self bind:@"selectionIndexes" toObject:destination withKeyPath:@"selectionIndexes" options:nil];
-    }
+
+    if ([[self infoForBinding:@"selectionIndexes"] objectForKey:CPObservedObjectKey] !== destination)
+        [self bind:@"selectionIndexes" toObject:destination withKeyPath:@"selectionIndexes" options:nil];
+
+    //[self bind:@"sortDescriptors" toObject:destination withKeyPath:@"sortDescriptors" options:nil];
 }
 
 - (void)setContent:(CPArray)content
