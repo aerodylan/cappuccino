@@ -2000,12 +2000,12 @@ var CPTableViewDefaultRowHeight = 23.0;
     return YES;
 }
 
-- (CPImage)dragImageForRowsWithIndexes:(CPIndexSet)dragRows tableColumns:(CPArray)theTableColumns event:(CPEvent)dragEvent offset:(CPPointPointer)dragImageOffset
+- (CPImage)dragImageForRowsWithIndexes:(CPIndexSet)dragRows tableColumns:(CPArray)theTableColumns event:(CPEvent)dragEvent offset:(CGPoint)dragImageOffset
 {
-    return [[CPImage alloc] initWithContentsOfFile:@"Frameworks/AppKit/Resources/GenericFile.png" size:CGSizeMake(32,32)];
+    return [[CPImage alloc] initWithContentsOfFile:@"Frameworks/AppKit/Resources/GenericFile.png" size:_CGSizeMake(32,32)];
 }
 
-- (CPView)dragViewForRowsWithIndexes:(CPIndexSet)theDraggedRows tableColumns:(CPArray)theTableColumns event:(CPEvent)theDragEvent offset:(CPPointPointer)dragViewOffset
+- (CPView)dragViewForRowsWithIndexes:(CPIndexSet)theDraggedRows tableColumns:(CPArray)theTableColumns event:(CPEvent)theDragEvent offset:(CGPoint)dragViewOffset
 {
     var bounds = [self bounds],
         view = [[CPView alloc] initWithFrame:bounds];
@@ -2039,8 +2039,8 @@ var CPTableViewDefaultRowHeight = 23.0;
     }
 
     var dragPoint = [self convertPoint:[theDragEvent locationInWindow] fromView:nil];
-    dragViewOffset.x = _CGRectGetWidth(bounds)/2 - dragPoint.x;
-    dragViewOffset.y = _CGRectGetHeight(bounds)/2 - dragPoint.y;
+    dragViewOffset.x = _CGRectGetMidX(bounds) - dragPoint.x;
+    dragViewOffset.y = _CGRectGetMidY(bounds) - dragPoint.y;
 
     return view;
 }
@@ -2051,7 +2051,7 @@ var CPTableViewDefaultRowHeight = 23.0;
     // Copy the dataviews add them to a transparent drag view and use that drag view
     // to make it appear we are dragging images of those rows (as you would do in regular Cocoa)
 */
-- (CPView)_dragViewForColumn:(int)theColumnIndex event:(CPEvent)theDragEvent offset:(CPPointPointer)theDragViewOffset
+- (CPView)_dragViewForColumn:(int)theColumnIndex event:(CPEvent)theDragEvent offset:(CGPoint)theDragViewOffset
 {
     var dragView = [[CPView alloc] initWithFrame:_CGRectMakeZero()];
         tableColumn = [[self tableColumns] objectAtIndex:theColumnIndex],
@@ -2082,7 +2082,7 @@ var CPTableViewDefaultRowHeight = 23.0;
 
     // Add the column header view
     var headerFrame = [headerView frame];
-    headerFrame.origin = CPPointMakeZero();
+    headerFrame.origin = _CGPointMakeZero();
 
     columnHeaderView = [[_CPTableColumnHeaderView alloc] initWithFrame:headerFrame];
     [columnHeaderView setStringValue:[headerView stringValue]];
@@ -2111,13 +2111,12 @@ var CPTableViewDefaultRowHeight = 23.0;
 {
     if (row > [self numberOfRows] && operation === CPTableViewDropOn)
     {
-        var numberOfRows = [self numberOfRows] + 1;
-        var reason = @"Attempt to set dropRow=" + row +
+        var numberOfRows = [self numberOfRows] + 1,
+            reason = @"Attempt to set dropRow=" + row +
                      " dropOperation=CPTableViewDropOn when [0 - " + numberOfRows + "] is valid range of rows."
 
         [[CPException exceptionWithName:@"Error" reason:reason userInfo:nil] raise];
     }
-
 
     _retargetedDropRow = row;
     _retargetedDropOperation = operation;
@@ -2829,7 +2828,7 @@ var CPTableViewDefaultRowHeight = 23.0;
 {
     var row = [self rowAtPoint:aPoint];
 
-    //if the user clicks outside a row then deslect everything
+    //if the user clicks outside a row then deselect everything
     if (row < 0 && _allowsEmptySelection)
         [self selectRowIndexes:[CPIndexSet indexSet] byExtendingSelection:NO];
 
@@ -2899,7 +2898,7 @@ var CPTableViewDefaultRowHeight = 23.0;
             if ([self canDragRowsWithIndexes:_draggedRowIndexes atPoint:aPoint] && [_dataSource tableView:self writeRowsWithIndexes:_draggedRowIndexes toPasteboard:pboard])
             {
                 var currentEvent = [CPApp currentEvent],
-                    offset = CPPointMakeZero(),
+                    offset = _CGPointMakeZero(),
                     tableColumns = [_tableColumns objectsAtIndexes:_exposedColumns];
 
                 // We deviate from the default Cocoa implementation here by asking for a view in stead of an image
@@ -2920,9 +2919,10 @@ var CPTableViewDefaultRowHeight = 23.0;
                     [view setImage:image];
                 }
 
-                var bounds = [view bounds];
-                var viewLocation = CPPointMake(aPoint.x - _CGRectGetWidth(bounds)/2 + offset.x, aPoint.y - _CGRectGetHeight(bounds)/2 + offset.y);
-                [self dragView:view at:viewLocation offset:CPPointMakeZero() event:[CPApp currentEvent] pasteboard:pboard source:self slideBack:YES];
+                var bounds = [view bounds],
+                    viewLocation = _CGPointMake(aPoint.x - _CGRectGetMidX(bounds) + offset.x, aPoint.y - _CGRectGetMidY(bounds) + offset.y);
+                
+                [self dragView:view at:viewLocation offset:_CGPointMakeZero() event:[CPApp currentEvent] pasteboard:pboard source:self slideBack:YES];
                 _startTrackingPoint = nil;
 
                 return NO;
@@ -3033,8 +3033,8 @@ var CPTableViewDefaultRowHeight = 23.0;
 - (CPDragOperation)draggingEntered:(id)sender
 {
     var location = [self convertPoint:[sender draggingLocation] fromView:nil],
-        dropOperation = [self _proposedDropOperationAtPoint:location],
-        row = [self _proposedRowAtPoint:location];
+        dropInfo = [self _proposedDropInfoAtPoint:location],
+        row = [dropInfo objectForKey:@"row"];
 
     if (_retargetedDropRow !== nil)
         row = _retargetedDropRow;
@@ -3046,7 +3046,7 @@ var CPTableViewDefaultRowHeight = 23.0;
     for (; i < count; i++)
     {
         if ([[[sender draggingPasteboard] types] containsObject:[draggedTypes objectAtIndex: i]])
-            return [self _validateDrop:sender proposedRow:row proposedDropOperation:dropOperation];
+            return [self _validateDrop:sender proposedRow:row proposedDropOperation:[dropInfo objectForKey:@"operation"]];
     }
 
     return CPDragOperationNone;
@@ -3086,52 +3086,46 @@ var CPTableViewDefaultRowHeight = 23.0;
 /*
     @ignore
 */
-- (CPTableViewDropOperation)_proposedDropOperationAtPoint:(CGPoint)theDragPoint
+- (CPDictionary)_proposedDropInfoAtPoint:(CGPoint)theDragPoint
 {
+	// We don't use rowAtPoint here because the drag indicator can appear below the last row
+	// and rowAtPoint doesn't return rows that are larger than numberOfRows
+    // FIX ME: this is going to break when we implement variable row heights... 
+    var info = [CPDictionary dictionary],
+        row = FLOOR(theDragPoint.y / (_rowHeight + _intercellSpacing.height)),
+        rowBelow = MIN(row + 1, [self numberOfRows]),
+		rect = [self rectOfRow:row],
+		quarterHeight = ROUND(_CGRectGetHeight(rect) * 0.25),
+        topLimit = ROUND(_CGRectGetMinY(rect) + quarterHeight),
+        bottomLimit = ROUND(_CGRectGetMaxY(rect) - quarterHeight);
+
+    [info setObject:row forKey:@"row"];
+    [info setObject:CPTableViewDropAbove forKey:@"operation"];
+    
     if (_retargetedDropOperation !== nil)
-        return _retargetedDropOperation;
-
-    var row = [self _proposedRowAtPoint:theDragPoint],
-        rowRect = [self rectOfRow:row];
-
-    // If there is no (the default) or to little inter cell spacing we create some room for the CPTableViewDropAbove indicator
-    // This probably doesn't work if the row height is smaller than or around 5.0
-    if (_intercellSpacing.height < 5.0)
-		rowRect = _CGRectInset(rowRect, 0.0, 5.0 - _intercellSpacing.height);
-
-	// If the altered row rect contains the drag point we show the drop on
-	// We don't show the drop on indicator if we are dragging below the last row
-	// in that case we always want to show the drop above indicator
-    if (_CGRectContainsPoint(rowRect, theDragPoint) && row < _numberOfRows)
-        return CPTableViewDropOn;
-
-    return CPTableViewDropAbove;
+    {
+        [info setObject:_retargetedDropOperation forKey:@"operation"];
+    }
+    else if (theDragPoint.y < topLimit)
+    {
+        if (row == 0 && [_draggedRowIndexes firstIndex] == 0)
+            [info setObject:CPTableViewDropOn forKey:@"operation"];
+    }
+    else if (theDragPoint.y > bottomLimit)
+    {
+        [info setObject:rowBelow forKey:@"row"];
+    }
+    else if (row < _numberOfRows)
+    {
+        [info setObject:CPTableViewDropOn forKey:@"operation"];
+    }
+    
+    return info;
 }
 
 /*
     @ignore
 */
-- (CPInteger)_proposedRowAtPoint:(CGPoint)dragPoint
-{
-	// We don't use rowAtPoint here because the drag indicator can appear below the last row
-	// and rowAtPoint doesn't return rows that are larger than numberOfRows
-    // FIX ME: this is going to break when we implement variable row heights... 
-	var row = FLOOR(dragPoint.y / ( _rowHeight + _intercellSpacing.height )),
-	// Determine if the mouse is currently closer to this row or the row below it
-        lowerRow = row + 1,
-		rect = [self rectOfRow:row],
-        bottomPoint = CGRectGetMaxY(rect),
-        bottomThirty = bottomPoint - ((bottomPoint - CGRectGetMinY(rect)) * 0.3);
-
-    if (dragPoint.y > MAX(bottomThirty, bottomPoint - 6))
-    	row = lowerRow;
-
-    if (row >= [self numberOfRows])
-        row = [self numberOfRows];
-
-	return row;
-}
-
 - (void)_validateDrop:(id)info proposedRow:(CPInteger)row proposedDropOperation:(CPTableViewDropOperation)dropOperation
 {
     if (_implementedDataSourceMethods & CPTableViewDataSource_tableView_validateDrop_proposedRow_proposedDropOperation_)
@@ -3148,7 +3142,7 @@ var CPTableViewDefaultRowHeight = 23.0;
     return [self rectOfRow:theRowIndex];
 }
 
-- (CGRect)_rectForDropHighlightViewBetweenUpperRow:(int)theUpperRowIndex andLowerRow:(int)theLowerRowIndex offset:(CPPoint)theOffset
+- (CGRect)_rectForDropHighlightViewBetweenUpperRow:(int)theUpperRowIndex andLowerRow:(int)theLowerRowIndex offset:(CGPoint)theOffset
 {
     if (theLowerRowIndex > [self numberOfRows])
         theLowerRowIndex = [self numberOfRows];
@@ -3159,18 +3153,15 @@ var CPTableViewDefaultRowHeight = 23.0;
 - (CPDragOperation)draggingUpdated:(id)sender
 {
     var location = [self convertPoint:[sender draggingLocation] fromView:nil],
-        dropOperation = [self _proposedDropOperationAtPoint:location],
+        dropInfo = [self _proposedDropInfoAtPoint:location],
+        row = [dropInfo objectForKey:@"row"],
+        dropOperation = [dropInfo objectForKey:@"operation"],
         numberOfRows = [self numberOfRows];
-
-    var row = [self _proposedRowAtPoint:location],
         dragOperation = [self _validateDrop:sender proposedRow:row proposedDropOperation:dropOperation];
         exposedClipRect = [self exposedClipRect];
 
     if (_retargetedDropRow !== nil)
         row = _retargetedDropRow;
-
-    if (dropOperation === CPTableViewDropOn && row >= [self numberOfRows])
-        row = [self numberOfRows] - 1;
 
     var rect = _CGRectMakeZero();
 
@@ -3208,13 +3199,13 @@ var CPTableViewDefaultRowHeight = 23.0;
 - (BOOL)performDragOperation:(id)sender
 {
     var location = [self convertPoint:[sender draggingLocation] fromView:nil];
-        operation = [self _proposedDropOperationAtPoint:location],
+        info = [self _proposedDropInfoAtPoint:location],
         row = _retargetedDropRow;
 
     if (row === nil)
-        var row = [self _proposedRowAtPoint:location];
+        row = [info objectForKey:@"row"];
 
-    return [_dataSource tableView:self acceptDrop:sender row:row dropOperation:operation];
+    return [_dataSource tableView:self acceptDrop:sender row:row dropOperation:[info objectForKey:@"operation"]];
 }
 
 /*
