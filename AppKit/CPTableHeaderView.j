@@ -529,28 +529,29 @@ var CPTableHeaderViewResizeZone = 3.0;
         minWidth = [tableColumn minWidth] + spacing,
         maxWidth = [tableColumn maxWidth] + spacing;
         
-    if (newWidth < minWidth)
+    if (newWidth <= minWidth)
         [[CPCursor resizeRightCursor] set];
-    else if (newWidth > maxWidth)
+    else if (newWidth >= maxWidth)
         [[CPCursor resizeLeftCursor] set];
     else
-    {
-        var columnRect = [_tableView rectOfColumn:aColumnIndex],
-            columnMinX = _CGRectGetMinX(columnRect),
-            columnMaxX = _CGRectGetMaxX(columnRect);
+        [[CPCursor resizeLeftRightCursor] set];
         
-        // Don't resize unless the cursor is within min/max and has reached the column edge 
-        if (aPoint.x >= (columnMinX + minWidth) && 
-            aPoint.x <= (columnMinX + maxWidth) &&
-            ((delta > 0 && aPoint.x > columnMaxX) || (delta < 0 && aPoint.x < columnMaxX)))
-        {
-            _tableView._lastColumnShouldSnap = NO;
-            [tableColumn setWidth:newWidth - spacing];
+    var columnRect = [_tableView rectOfColumn:aColumnIndex],
+        columnWidth = _CGRectGetWidth(columnRect);
+    
+    if ((delta > 0 && columnWidth == maxWidth) || (delta < 0 && columnWidth == minWidth))
+        return;
+        
+    var columnMinX = _CGRectGetMinX(columnRect),
+        columnMaxX = _CGRectGetMaxX(columnRect);
+        
+    if ((delta > 0 && aPoint.x > columnMaxX) || (delta < 0 && aPoint.x < columnMaxX))
+    {
+        _tableView._lastColumnShouldSnap = NO;
+        [tableColumn setWidth:newWidth - spacing];
 
-            [[CPCursor resizeLeftRightCursor] set];
-            [self setNeedsLayout];
-            [self setNeedsDisplay:YES];
-        }
+        [self setNeedsLayout];
+        [self setNeedsDisplay:YES];
     }
 }
 
