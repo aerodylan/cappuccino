@@ -250,7 +250,7 @@ var CPTableHeaderViewResizeZone = 3.0;
 
     var rect = [self headerRectOfColumn:column];
 
-    rect.origin.x = _CGRectGetMaxX(rect) - CPTableHeaderViewResizeZone;
+    rect.origin.x = (_CGRectGetMaxX(rect) - CPTableHeaderViewResizeZone) - 1.0;
     rect.size.width = (CPTableHeaderViewResizeZone * 2.0) + 1.0;  // + 1 for resize line
     
     return rect;
@@ -281,16 +281,16 @@ var CPTableHeaderViewResizeZone = 3.0;
 - (void)_trackMouse:(CPEvent)theEvent
 {
     var type = [theEvent type],
-        currentLocation = [self convertPoint:[theEvent locationInWindow] fromView:nil];
-        
-    var columnIndex = [self columnAtPoint:currentLocation],
-        shouldResize = [self _shouldResizeTableColumn:columnIndex at:_CGPointMake(currentLocation.x, currentLocation.y)];
+        currentLocation = [self convertPoint:[theEvent locationInWindow] fromView:nil],
+        adjustedLocation = _CGPointMake(MAX(currentLocation.x - CPTableHeaderViewResizeZone, 0.0), currentLocation.y),
+        columnIndex = [self columnAtPoint:adjustedLocation],
+        shouldResize = [self _shouldResizeTableColumn:columnIndex at:currentLocation];
 
     if (type === CPLeftMouseUp)
     {
         if (shouldResize)
             [self stopResizingTableColumn:_activeColumn at:currentLocation];
-        else if ([self _should_stopTrackingTableColumn:columnIndex at:currentLocation])
+        else if ([self _shouldStopTrackingTableColumn:columnIndex at:currentLocation])
         {
             [_tableView _didClickTableColumn:columnIndex modifierFlags:[theEvent modifierFlags]];
             [self _stopTrackingTableColumn:columnIndex at:currentLocation];
@@ -373,7 +373,7 @@ var CPTableHeaderViewResizeZone = 3.0;
     return YES;
 }
 
-- (BOOL)_should_stopTrackingTableColumn:(int)aColumnIndex at:(CGPoint)aPoint
+- (BOOL)_shouldStopTrackingTableColumn:(int)aColumnIndex at:(CGPoint)aPoint
 {
     return _isTrackingColumn && 
            _activeColumn === aColumnIndex && 
@@ -574,7 +574,7 @@ var CPTableHeaderViewResizeZone = 3.0;
     }
 
     var mouseLocation = [self convertPoint:[theEvent locationInWindow] fromView:nil],    
-        mouseOverLocation = _CGPointMake(mouseLocation.x - CPTableHeaderViewResizeZone, mouseLocation.y),
+        mouseOverLocation = _CGPointMake(MAX(mouseLocation.x - CPTableHeaderViewResizeZone, 0.0), mouseLocation.y),
         overColumn = [self columnAtPoint:mouseOverLocation];
 
     if (overColumn >= 0 && _CGRectContainsPoint([self _cursorRectForColumn:overColumn], mouseLocation))
@@ -583,9 +583,9 @@ var CPTableHeaderViewResizeZone = 3.0;
             spacing = [_tableView intercellSpacing].width,
             width = [tableColumn width] + spacing,
 
-        if (width == [tableColumn minWidth] + spacing)
+        if (width <= [tableColumn minWidth])
             [[CPCursor resizeRightCursor] set];
-        else if (width == [tableColumn maxWidth] + spacing)
+        else if (width >= [tableColumn maxWidth])
             [[CPCursor resizeLeftCursor] set];
         else
             [[CPCursor resizeLeftRightCursor] set];
