@@ -136,6 +136,9 @@ CPTableViewFirstColumnOnlyAutoresizingStyle = 5;
     A CPTableView requires you to set a dataSource which implements numberOfRowsInTableView:
     and tableView:objectValueForTableColumn:row:
 */
+
+var CPTableViewDefaultRowHeight = 23.0;
+
 @implementation CPTableView : CPControl
 {
     id          _dataSource;
@@ -255,7 +258,7 @@ CPTableViewFirstColumnOnlyAutoresizingStyle = 5;
         _numberOfHiddenColumns = 0;
 
         _intercellSpacing = _CGSizeMake(3.0, 2.0);
-        _rowHeight = 23.0;
+        _rowHeight = CPTableViewDefaultRowHeight;
 
         [self setGridColor:[CPColor colorWithHexString:@"c0c0c0"]];
         [self setGridStyleMask:CPTableViewGridNone];
@@ -2050,9 +2053,10 @@ CPTableViewFirstColumnOnlyAutoresizingStyle = 5;
 */
 - (CPView)_dragViewForColumn:(int)theColumnIndex event:(CPEvent)theDragEvent offset:(CPPointPointer)theDragViewOffset
 {
-    var dragView = [[CPView alloc] initWithFrame:CPRectMakeZero()];
+    var dragView = [[CPView alloc] initWithFrame:_CGRectMakeZero()];
         tableColumn = [[self tableColumns] objectAtIndex:theColumnIndex],
-        bounds = CPRectMake(0.0, 0.0, [tableColumn width], CPRectGetHeight([self _exposedRect]) + 23.0),
+        headerHeight = _CGRectGetHeight([_headerView frame]),
+        bounds = _CGRectMake(0.0, 0.0, [tableColumn width] + _intercellSpacing.width, _CGRectGetHeight([self _exposedRect]) + headerHeight),
         columnRect = [self rectOfColumn:theColumnIndex],
         headerView = [tableColumn headerView];
 
@@ -2067,7 +2071,7 @@ CPTableViewFirstColumnOnlyAutoresizingStyle = 5;
         dataViewFrame.origin.x = 0.0;
 
         // Offset by table header height - scroll position
-        dataViewFrame.origin.y = ( CPRectGetMinY(dataViewFrame) - CPRectGetMinY([self _exposedRect]) ) + 23.0;
+        dataViewFrame.origin.y = (_CGRectGetMinY(dataViewFrame) - _CGRectGetMinY([self _exposedRect]) ) + headerHeight;
         [dataView setFrame:dataViewFrame];
 
         [dataView setObjectValue:[self _objectValueForTableColumn:tableColumn row:row]];
@@ -3093,7 +3097,7 @@ CPTableViewFirstColumnOnlyAutoresizingStyle = 5;
     // If there is no (the default) or to little inter cell spacing we create some room for the CPTableViewDropAbove indicator
     // This probably doesn't work if the row height is smaller than or around 5.0
     if (_intercellSpacing.height < 5.0)
-		rowRect = CPRectInset(rowRect, 0.0, 5.0 - _intercellSpacing.height);
+		rowRect = _CGRectInset(rowRect, 0.0, 5.0 - _intercellSpacing.height);
 
 	// If the altered row rect contains the drag point we show the drop on
 	// We don't show the drop on indicator if we are dragging below the last row
@@ -3136,7 +3140,7 @@ CPTableViewFirstColumnOnlyAutoresizingStyle = 5;
     return CPDragOperationNone;
 }
 
-- (CPRect)_rectForDropHighlightViewOnRow:(int)theRowIndex
+- (CGRect)_rectForDropHighlightViewOnRow:(int)theRowIndex
 {
     if (theRowIndex >= [self numberOfRows])
         theRowIndex = [self numberOfRows] - 1;
@@ -3144,7 +3148,7 @@ CPTableViewFirstColumnOnlyAutoresizingStyle = 5;
     return [self rectOfRow:theRowIndex];
 }
 
-- (CPRect)_rectForDropHighlightViewBetweenUpperRow:(int)theUpperRowIndex andLowerRow:(int)theLowerRowIndex offset:(CPPoint)theOffset
+- (CGRect)_rectForDropHighlightViewBetweenUpperRow:(int)theUpperRowIndex andLowerRow:(int)theLowerRowIndex offset:(CPPoint)theOffset
 {
     if (theLowerRowIndex > [self numberOfRows])
         theLowerRowIndex = [self numberOfRows];
@@ -3168,7 +3172,7 @@ CPTableViewFirstColumnOnlyAutoresizingStyle = 5;
     if (dropOperation === CPTableViewDropOn && row >= [self numberOfRows])
         row = [self numberOfRows] - 1;
 
-    var rect = CPRectMakeZero();
+    var rect = _CGRectMakeZero();
 
     if (row === -1)
         rect = exposedClipRect;
@@ -3528,7 +3532,7 @@ var CPTableViewDataSourceKey                = @"CPTableViewDataSourceKey",
         if ([aCoder containsValueForKey:CPTableViewRowHeightKey])
             _rowHeight = [aCoder decodeFloatForKey:CPTableViewRowHeightKey];
         else
-            _rowHeight = 23.0;
+            _rowHeight = CPTableViewDefaultRowHeight;
             
         _intercellSpacing = [aCoder decodeSizeForKey:CPTableViewIntercellSpacingKey] || _CGSizeMake(3.0, 2.0);
 
@@ -3630,10 +3634,29 @@ var CPTableViewDataSourceKey                = @"CPTableViewDataSourceKey",
     BOOL        isBlinking @accessors;
 }
 
+- (void)_drawDropAboveIndicatorWithContext:(CGContext)context rect:(CGRect)aRect color:(CPColor)aColor width:(int)aWidth
+{
+    CGContextSetStrokeColor(context, aColor);
+    CGContextSetLineWidth(context, aWidth);
+    
+    // draw the circle thing
+    CGContextStrokeEllipseInRect(context, _CGRectMake(aRect.origin.x + 4, aRect.origin.y + 4, 8, 8));
+    
+    // then draw the line
+    CGContextBeginPath(context);
+    CGContextMoveToPoint(context, 10, aRect.origin.y + 8);
+    CGContextAddLineToPoint(context, aRect.size.width - aRect.origin.y - 8, aRect.origin.y + 8);
+    CGContextStrokePath(context);
+}
+
 - (void)drawRect:(CGRect)aRect
 {
-    if (tableView._destinationDragStyle === CPTableViewDraggingDestinationFeedbackStyleNone || isBlinking)
+    if (tableView._destinationDragStyle === CPTableViewDraggingDestinationFeedbackStyleNone || 
+        [[tableView headerView] isDragging] ||
+        isBlinking)
+    {
         return;
+    }
 
     var context = [[CPGraphicsContext currentContext] graphicsPort];
 
@@ -3660,8 +3683,8 @@ var CPTableViewDataSourceKey                = @"CPTableViewDataSourceKey",
             CGContextSetFillColor(context, [CPColor colorWithRed:72/255 green:134/255 blue:202/255 alpha:0.25]);
             CGContextFillRoundedRectangleInRect(context, newRect, 8, YES, YES, YES, YES);
         }
+        
         CGContextStrokeRoundedRectangleInRect(context, newRect, 8, YES, YES, YES, YES);
-
     }
     else if (dropOperation === CPTableViewDropAbove)
     {
@@ -3671,31 +3694,9 @@ var CPTableViewDataSourceKey                = @"CPTableViewDataSourceKey",
         var selectedRows = [tableView selectedRowIndexes];
 
         if ([selectedRows containsIndex:currentRow - 1] || [selectedRows containsIndex:currentRow])
-        {
-            CGContextSetStrokeColor(context, [CPColor whiteColor]);
-            CGContextSetLineWidth(context, 4);
-            //draw the circle thing
-            CGContextStrokeEllipseInRect(context, _CGRectMake(aRect.origin.x + 4, aRect.origin.y + 4, 8, 8));
-            //then draw the line
-            CGContextBeginPath(context);
-            CGContextMoveToPoint(context, 10, aRect.origin.y + 8);
-            CGContextAddLineToPoint(context, aRect.size.width - aRect.origin.y - 8, aRect.origin.y + 8);
-            CGContextClosePath(context);
-            CGContextStrokePath(context);
-
-            CGContextSetStrokeColor(context, [CPColor colorWithHexString:@"4886ca"]);
-            CGContextSetLineWidth(context, 3);
-        }
-
-        //draw the circle thing
-        CGContextStrokeEllipseInRect(context, _CGRectMake(aRect.origin.x + 4, aRect.origin.y + 4, 8, 8));
-        //then draw the line
-        CGContextBeginPath(context);
-        CGContextMoveToPoint(context, 10, aRect.origin.y + 8);
-        CGContextAddLineToPoint(context, aRect.size.width - aRect.origin.y - 8, aRect.origin.y + 8);
-        CGContextClosePath(context);
-        CGContextStrokePath(context);
-        //CGContextStrokeLineSegments(context, [aRect.origin.x + 8,  aRect.origin.y + 8, 300 , aRect.origin.y + 8]);
+            [self _drawDropAboveIndicatorWithContext:context rect:aRect color:[CPColor whiteColor] width:4];
+            
+        [self _drawDropAboveIndicatorWithContext:context rect:aRect color:[CPColor colorWithHexString:@"4886ca"] width:3];
     }
 }
 

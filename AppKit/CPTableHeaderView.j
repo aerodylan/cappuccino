@@ -172,7 +172,8 @@ var _CPTableColumnHeaderViewStringValueKey = @"_CPTableColumnHeaderViewStringVal
 
 @end
 
-var CPTableHeaderViewResizeZone = 3.0;
+var CPTableHeaderViewResizeZone = 3.0,
+    CPTableHeaderViewDragTolerance = 10.0;
 
 @implementation CPTableHeaderView : CPView
 {
@@ -388,7 +389,7 @@ var CPTableHeaderViewResizeZone = 3.0;
 
 - (BOOL)_shouldDragTableColumn:(int)aColumnIndex at:(CGPoint)aPoint
 {
-    return [_tableView allowsColumnReordering] && ABS(aPoint.x - _mouseDownLocation.x) >= 10.0;
+    return [_tableView allowsColumnReordering] && ABS(aPoint.x - _mouseDownLocation.x) >= CPTableHeaderViewDragTolerance;
 }
 
 - (CGRect)_headerRectOfLastVisibleColumn
@@ -443,12 +444,19 @@ var CPTableHeaderViewResizeZone = 3.0;
     [_tableView _setDraggedColumn:_activeColumn];
 }
 
+- (BOOL)isDragging
+{
+    return _isDragging;
+}
+
 - (void)draggedView:(CPView)aView beganAt:(CGPoint)aPoint
 {
     _isDragging = YES;
 
     [[[[_tableView tableColumns] objectAtIndex:_activeColumn] headerView] setHidden:YES];
     [_tableView _setDraggedColumn:_activeColumn];
+    
+    [[CPCursor closedHandCursor] set];
 
     [self setNeedsDisplay:YES];
 }
@@ -495,6 +503,8 @@ var CPTableHeaderViewResizeZone = 3.0;
     [_tableView _setDraggedColumn:-1];
     [[[[_tableView tableColumns] objectAtIndex:_activeColumn] headerView] setHidden:NO];
     [self _stopTrackingTableColumn:_activeColumn at:aLocation];
+    
+    [[CPCursor arrowCursor] set];
 
     [self setNeedsDisplay:YES];
 }
