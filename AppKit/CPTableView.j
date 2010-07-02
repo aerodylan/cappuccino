@@ -3638,6 +3638,9 @@ var CPTableViewDataSourceKey                = @"CPTableViewDataSourceKey",
 
 @end
 
+
+var CPDropOperationIndicatorHeight = 8;
+
 @implementation _CPDropOperationDrawingView : CPView
 {
     unsigned    dropOperation @accessors;
@@ -3650,14 +3653,21 @@ var CPTableViewDataSourceKey                = @"CPTableViewDataSourceKey",
 {
     CGContextSetStrokeColor(context, aColor);
     CGContextSetLineWidth(context, aWidth);
+    CGContextSetLineCap(context, kCGLineCapRound);
     
     // draw the circle thing
-    CGContextStrokeEllipseInRect(context, _CGRectMake(aRect.origin.x + 4, aRect.origin.y + 4, 8, 8));
+    var inset = CPDropOperationIndicatorHeight / 2,
+        rect = _CGRectMake(aRect.origin.x + inset, 
+                           aRect.origin.y + inset, 
+                           CPDropOperationIndicatorHeight, 
+                           CPDropOperationIndicatorHeight);
+                           
+    CGContextStrokeEllipseInRect(context, rect);
     
     // then draw the line
     CGContextBeginPath(context);
-    CGContextMoveToPoint(context, 10, aRect.origin.y + 8);
-    CGContextAddLineToPoint(context, aRect.size.width - aRect.origin.y - 8, aRect.origin.y + 8);
+    CGContextMoveToPoint(context, _CGRectGetMaxX(rect), _CGRectGetMidY(rect));
+    CGContextAddLineToPoint(context, _CGRectGetMaxX(aRect) - inset, _CGRectGetMidY(rect));
     CGContextStrokePath(context);
 }
 
@@ -3683,7 +3693,9 @@ var CPTableViewDataSourceKey                = @"CPTableViewDataSourceKey",
     {
         // if row is selected don't fill and stroke white
         var selectedRows = [tableView selectedRowIndexes],
-            newRect = _CGRectMake(aRect.origin.x + 2, aRect.origin.y + 2, aRect.size.width - 4, aRect.size.height - 5);
+            newRect = _CGRectInset(aRect, 2.0, 2.0);
+            
+        --newRect.size.height;
 
         if ([selectedRows containsIndex:currentRow])
         {
@@ -3692,7 +3704,7 @@ var CPTableViewDataSourceKey                = @"CPTableViewDataSourceKey",
         }
         else
         {
-            CGContextSetFillColor(context, [CPColor colorWithRed:72/255 green:134/255 blue:202/255 alpha:0.25]);
+            CGContextSetFillColor(context, [CPColor colorWithRed:72/255.0 green:134/255.0 blue:202/255.0 alpha:0.25]);
             CGContextFillRoundedRectangleInRect(context, newRect, 8, YES, YES, YES, YES);
         }
         
@@ -3700,8 +3712,8 @@ var CPTableViewDataSourceKey                = @"CPTableViewDataSourceKey",
     }
     else if (dropOperation === CPTableViewDropAbove)
     {
-        // reposition the view up a tad
-        [self setFrameOrigin:CGPointMake(_frame.origin.x, _frame.origin.y - 8)];
+        // reposition the view up a tad so indicator can draw above the row rect
+        [self setFrameOrigin:CGPointMake(_frame.origin.x, _frame.origin.y - CPDropOperationIndicatorHeight)];
 
         var selectedRows = [tableView selectedRowIndexes];
 
