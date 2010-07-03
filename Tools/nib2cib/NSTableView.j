@@ -61,6 +61,8 @@
         
         _gridStyleMask = [aCoder decodeIntForKey:@"NSGridStyleMask"];
         
+        [self setBackgroundColor:[aCoder decodeObjectForKey:"NSBackgroundColor"] || [CPColor whiteColor]];
+            
         _usesAlternatingRowBackgroundColors = (flags & 0x00800000) ? YES : NO;
         _alternatingRowBackgroundColors = [[CPColor whiteColor], [CPColor colorWithHexString:@"edf3fe"]];
         

@@ -2030,9 +2030,9 @@ var CPTableViewDefaultRowHeight = 23.0,
 
     [view setAlphaValue:0.7];
 
-    // We have to fetch all the data views for the selected rows and columns
+    // We have to fetch all the data views for the selected rows and columns.
     // After that we can copy these add them to a transparent drag view and use that drag view
-    // to make it appear we are dragging images of those rows (as you would do in regular Cocoa)
+    // to make it appear we are dragging images of those rows (as you would do in regular Cocoa).
     var columnIndex = [theTableColumns count];
     
     while (columnIndex--)
@@ -2071,7 +2071,7 @@ var CPTableViewDefaultRowHeight = 23.0,
 */
 - (CPView)_dragViewForColumn:(int)theColumnIndex event:(CPEvent)theDragEvent offset:(CGPoint)theDragViewOffset
 {
-    var dragView = [[CPView alloc] initWithFrame:_CGRectMakeZero()];
+    var dragView = [[_CPColumnDragDrawingView alloc] initWithFrame:_CGRectMakeZero()];
         tableColumn = [[self tableColumns] objectAtIndex:theColumnIndex],
         headerHeight = _CGRectGetHeight([_headerView frame]),
         bounds = _CGRectMake(0.0, 0.0, [tableColumn width] + _intercellSpacing.width, _CGRectGetHeight([self _exposedRect]) + headerHeight),
@@ -2107,6 +2107,7 @@ var CPTableViewDefaultRowHeight = 23.0,
     [columnHeaderView setThemeState:[headerView themeState]];
     [dragView addSubview:columnHeaderView];
 
+    [dragView setTableView:self];
     [dragView setBackgroundColor:[CPColor whiteColor]];
     [dragView setAlphaValue:0.7];
     [dragView setFrame:bounds];
@@ -2515,29 +2516,25 @@ var CPTableViewDefaultRowHeight = 23.0,
     [self drawBackgroundInClipRect:exposedRect];
     [self drawGridInClipRect:exposedRect];
     [self highlightSelectionInClipRect:exposedRect];
-
-    if (_draggedColumnIndex === -1)
-        return;
-
-    var context = [[CPGraphicsContext currentContext] graphicsPort],
-        columnRect = [self rectOfColumn:_draggedColumnIndex];
-
-    CGContextSetFillColor(context, [CPColor grayColor]);
-    CGContextFillRect(context, columnRect);
 }
 
 - (void)drawBackgroundInClipRect:(CGRect)aRect
 {
+    var context = [[CPGraphicsContext currentContext] graphicsPort];
+    
     if (!_usesAlternatingRowBackgroundColors)
+    {
+        CGContextSetFillColor(context, [self backgroundColor]);
+        CGContextFillRect(context, aRect);
+        
         return;
+    }
 
     var rowColors = [self alternatingRowBackgroundColors],
         colorCount = [rowColors count];
 
     if (colorCount === 0)
         return;
-
-    var context = [[CPGraphicsContext currentContext] graphicsPort];
 
     if (colorCount === 1)
     {
@@ -2546,8 +2543,9 @@ var CPTableViewDefaultRowHeight = 23.0,
 
         return;
     }
-    // CGContextFillRect(context, CGRectIntersection(aRect, fillRect));
+    
     // console.profile("row-paint");
+    
     var exposedRows = [self rowsInRect:aRect],
         firstRow = exposedRows.location,
         lastRow = CPMaxRange(exposedRows) - 1,
@@ -2573,6 +2571,7 @@ var CPTableViewDefaultRowHeight = 23.0,
         CGContextSetFillColor(context, rowColors[colorIndex]);
         CGContextFillPath(context);
     }
+    
     // console.profileEnd("row-paint");
 
     var totalHeight = _CGRectGetMaxY(aRect);
@@ -3561,7 +3560,7 @@ var CPTableViewDataSourceKey                = @"CPTableViewDataSourceKey",
             
         _intercellSpacing = [aCoder decodeSizeForKey:CPTableViewIntercellSpacingKey] || _CGSizeMake(3.0, 2.0);
 
-        _gridColor = [aCoder decodeObjectForKey:CPTableViewGridColorKey] || [CPColor grayColor];
+        _gridColor = [aCoder decodeObjectForKey:CPTableViewGridColorKey] || [CPColor colorWithHexString:@"c0c0c0"];
         _gridStyleMask = [aCoder decodeIntForKey:CPTableViewGridStyleMaskKey] || CPTableViewGridNone;
 
         _usesAlternatingRowBackgroundColors = [aCoder decodeObjectForKey:CPTableViewUsesAlternatingBackgroundKey];
@@ -3651,15 +3650,49 @@ var CPTableViewDataSourceKey                = @"CPTableViewDataSourceKey",
 
 @end
 
+@implementation _CPColumnDragDrawingView : CPView
+{
+    CPTableView tableView   @accessors;
+}
+
+- (void)drawRect:(CGRect)aRect
+{
+    var context = [[CPGraphicsContext currentContext] graphicsPort];
+    
+    if ([tableView._selectedColumnIndexes count] >= 1)
+    {
+        
+    }
+    
+    var bounds = [self bounds],
+        minX = _CGRectGetMinX(bounds) + 0.5,
+        maxX = _CGRectGetMaxX(bounds) - 0.5;
+    
+    CGContextSetLineWidth(context, 1.0);
+    CGContextSetStrokeColor(tableView._gridColor);
+    
+    CGContextBeginPath(context);
+    
+    CGContextMoveToPoint(context, minX, _CGRectGetMinY(bounds));
+    CGContextAddLineToPoint(context, minX, _CGRectGetMaxY(bounds));
+    
+    CGContextMoveToPoint(context, maxX, _CGRectGetMinY(bounds));
+    CGContextAddLineToPoint(context, maxX, _CGRectGetMaxY(bounds));
+    
+    CGContextStrokePath(context);
+}
+
+@end
+
 
 var CPDropOperationIndicatorHeight = 8;
 
 @implementation _CPDropOperationDrawingView : CPView
 {
-    unsigned    dropOperation @accessors;
-    CPTableView tableView @accessors;
-    int         currentRow @accessors;
-    BOOL        isBlinking @accessors;
+    unsigned    dropOperation   @accessors;
+    CPTableView tableView       @accessors;
+    int         currentRow      @accessors;
+    BOOL        isBlinking      @accessors;
 }
 
 - (void)_drawDropAboveIndicatorWithContext:(CGContext)context rect:(CGRect)aRect color:(CPColor)aColor width:(int)aWidth

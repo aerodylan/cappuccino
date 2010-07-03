@@ -653,20 +653,6 @@ var CPTableHeaderViewResizeZone = 3.0,
     }
 }
 
-- (void)drawRect:(CGRect)aRect
-{
-    if (!_tableView)
-        return;
-
-    if (_isDragging)
-    {
-        var context = [[CPGraphicsContext currentContext] graphicsPort];
-        
-        CGContextSetFillColor(context, [CPColor grayColor]);
-        CGContextFillRect(context, [self headerRectOfColumn:_activeColumn])
-    }
-}
-
 @end
 
 var CPTableHeaderViewTableViewKey = @"CPTableHeaderViewTableViewKey";
