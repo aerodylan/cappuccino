@@ -226,6 +226,7 @@ var CPTableViewDefaultRowHeight = 23.0,
     CPColor     _sourceListActiveBottomLineColor;
 
     int         _draggedColumnIndex;
+    BOOL        _draggedColumnIsSelected;
 
 /*
     CPGradient  _sourceListInactiveGradient;
@@ -339,6 +340,7 @@ var CPTableViewDefaultRowHeight = 23.0,
         _cornerView = [[_CPCornerView alloc] initWithFrame:_CGRectMake(0, 0, [CPScroller scrollerWidth], _CGRectGetHeight(_headerViewFrame))];
     
     _draggedColumnIndex = -1;
+    _draggedColumnIsSelected = NO;
 
     // Gradients for the source list
     _sourceListActiveGradient = CGGradientCreateWithColorComponents(CGColorSpaceCreateDeviceRGB(), [116.0/255.0, 163.0/255.0, 220.0/255.0,1.0, 48.0/255.0, 100.0/255.0, 183.0/255.0,1.0], [0,1], 2);
@@ -788,6 +790,10 @@ var CPTableViewDefaultRowHeight = 23.0,
     if (_draggedColumnIndex === aColumnIndex)
         return;
 
+    // If ending a column drag, reselect the column if it was selected
+    if (aColumnIndex === -1 && _draggedColumnIsSelected)
+        [_selectedColumnIndexes addIndex:_draggedColumnIndex];
+    
     _draggedColumnIndex = aColumnIndex;
 
     [self reloadDataForRowIndexes:_exposedRows columnIndexes:[CPIndexSet indexSetWithIndex:aColumnIndex]];
@@ -815,6 +821,14 @@ var CPTableViewDefaultRowHeight = 23.0,
 
     [_tableColumns removeObjectAtIndex:fromIndex];
     [_tableColumns insertObject:tableColumn atIndex:toIndex];
+    
+    var columnIsSelected = [_selectedColumnIndexes containsIndex:fromIndex];
+    
+    [_selectedColumnIndexes shiftIndexesStartingAtIndex:fromIndex + 1 by:-1];
+    [_selectedColumnIndexes shiftIndexesStartingAtIndex:toIndex by:1];
+        
+    if (columnIsSelected)
+        [_selectedColumnIndexes addIndex:toIndex];
 
     [[self headerView] setNeedsLayout];
     [[self headerView] setNeedsDisplay:YES];
@@ -1533,7 +1547,8 @@ var CPTableViewDefaultRowHeight = 23.0,
 
     var superviewSize = [superview bounds].size;
 
-    if (_dirtyTableColumnRangeIndex !== CPNotFound) [self _recalculateTableColumnRanges];//UPDATE_COLUMN_RANGES_IF_NECESSARY();
+    if (_dirtyTableColumnRangeIndex !== CPNotFound)
+        [self _recalculateTableColumnRanges];//UPDATE_COLUMN_RANGES_IF_NECESSARY();
 
     var count = _tableColumns.length,//NUMBER_OF_COLUMNS(),
         visColumns = [[CPArray alloc] init],
@@ -2028,7 +2043,7 @@ var CPTableViewDefaultRowHeight = 23.0,
     var bounds = [self bounds],
         view = [[CPView alloc] initWithFrame:bounds];
 
-    [view setAlphaValue:0.7];
+    [view setAlphaValue:0.6];
 
     // We have to fetch all the data views for the selected rows and columns.
     // After that we can copy these add them to a transparent drag view and use that drag view
@@ -2074,7 +2089,8 @@ var CPTableViewDefaultRowHeight = 23.0,
     var dragView = [[_CPColumnDragDrawingView alloc] initWithFrame:_CGRectMakeZero()];
         tableColumn = [[self tableColumns] objectAtIndex:theColumnIndex],
         headerHeight = _CGRectGetHeight([_headerView frame]),
-        bounds = _CGRectMake(0.0, 0.0, [tableColumn width] + _intercellSpacing.width, _CGRectGetHeight([self _exposedRect]) + headerHeight),
+        exposedRect = [self _exposedRect],
+        bounds = _CGRectMake(0.0, 0.0, [tableColumn width] + _intercellSpacing.width, _CGRectGetHeight(exposedRect) + headerHeight),
         columnRect = [self rectOfColumn:theColumnIndex],
         headerView = [tableColumn headerView];
 
@@ -2085,11 +2101,11 @@ var CPTableViewDefaultRowHeight = 23.0,
         var dataView = [self _newDataViewForRow:row tableColumn:tableColumn],
             dataViewFrame = [self frameOfDataViewAtColumn:theColumnIndex row:row];
 
-        // Only one column is ever dragged so we just place the view at
+        // Only one column is ever dragged so we just place the view at the left edge
         dataViewFrame.origin.x = 0.0;
 
         // Offset by table header height - scroll position
-        dataViewFrame.origin.y = (_CGRectGetMinY(dataViewFrame) - _CGRectGetMinY([self _exposedRect]) ) + headerHeight;
+        dataViewFrame.origin.y += headerHeight - _CGRectGetMinY(exposedRect);
         [dataView setFrame:dataViewFrame];
 
         [dataView setObjectValue:[self _objectValueForTableColumn:tableColumn row:row]];
@@ -2106,10 +2122,13 @@ var CPTableViewDefaultRowHeight = 23.0,
     [columnHeaderView setStringValue:[headerView stringValue]];
     [columnHeaderView setThemeState:[headerView themeState]];
     [dragView addSubview:columnHeaderView];
+    
+    _draggedColumnIsSelected = [_selectedColumnIndexes containsIndex:theColumnIndex];
+    [_selectedColumnIndexes removeIndex:theColumnIndex];
 
     [dragView setTableView:self];
-    [dragView setBackgroundColor:[CPColor whiteColor]];
-    [dragView setAlphaValue:0.7];
+    [dragView setColumnIndex:theColumnIndex];
+    [dragView setAlphaValue:0.6];
     [dragView setFrame:bounds];
 
     return dragView;
@@ -2508,14 +2527,11 @@ var CPTableViewDefaultRowHeight = 23.0,
 
 - (void)_drawRect:(CGRect)aRect
 {
-    // FIX ME: All three of these methods will likely need to be rewritten for 1.0
-    // We've got grid drawing in highlightSelection and crap everywhere.
-
     var exposedRect = [self _exposedRect];
 
     [self drawBackgroundInClipRect:exposedRect];
-    [self drawGridInClipRect:exposedRect];
     [self highlightSelectionInClipRect:exposedRect];
+    [self _autoDrawGridInClipRect:exposedRect];
 }
 
 - (void)drawBackgroundInClipRect:(CGRect)aRect
@@ -2594,17 +2610,26 @@ var CPTableViewDefaultRowHeight = 23.0,
 
 - (void)drawGridInClipRect:(CGRect)aRect
 {
-    var context = [[CPGraphicsContext currentContext] graphicsPort];
-
     [self _drawHorizontalGridInClipRect:aRect];
     [self _drawVerticalGridInClipRect:aRect];
 }
 
-- (void)_drawHorizontalGridInClipRect:(CGRect)aRect
-{    
+- (void)_autoDrawGridInClipRect:(CGRect)aRect
+{
+    [self _autoDrawHorizontalGridInClipRect:aRect];
+    [self _autoDrawVerticalGridInClipRect:aRect];
+}
+
+- (void)_autoDrawHorizontalGridInClipRect:(CGRect)aRect
+{
     if (!(_gridStyleMask & CPTableViewSolidHorizontalGridLineMask))
         return;
-            
+        
+    [self _drawHorizontalGridInClipRect:aRect];
+}
+
+- (void)_drawHorizontalGridInClipRect:(CGRect)aRect
+{
     var context = [[CPGraphicsContext currentContext] graphicsPort],
         exposedRows = [self rowsInRect:aRect];
         row = exposedRows.location,
@@ -2642,11 +2667,16 @@ var CPTableViewDefaultRowHeight = 23.0,
     CGContextStrokePath(context);
 }
 
-- (void)_drawVerticalGridInClipRect:(CGRect)aRect
+- (void)_autoDrawVerticalGridInClipRect:(CGRect)aRect
 {
     if (!(_gridStyleMask & CPTableViewSolidVerticalGridLineMask))
         return;
+        
+    [self _drawVerticalGridInClipRect:aRect];
+}
 
+- (void)_drawVerticalGridInClipRect:(CGRect)aRect
+{
     var exposedColumnIndexes = [self columnIndexesInRect:aRect],
         columnsArray = [];
 
@@ -2663,7 +2693,7 @@ var CPTableViewDefaultRowHeight = 23.0,
     for (; columnArrayIndex < columnArrayCount; ++columnArrayIndex)
     {
         var columnRect = [self rectOfColumn:columnsArray[columnArrayIndex]],
-            columnX = _CGRectGetMaxX(columnRect) + 0.5;
+            columnX = _CGRectGetMaxX(columnRect) - 0.5;
 
         CGContextMoveToPoint(context, columnX, minY);
         CGContextAddLineToPoint(context, columnX, maxY);
@@ -2677,7 +2707,7 @@ var CPTableViewDefaultRowHeight = 23.0,
 {
     if (_selectionHighlightStyle === CPTableViewSelectionHighlightStyleNone)
         return;
-
+        
     var context = [[CPGraphicsContext currentContext] graphicsPort],
         indexes = [],
         rectSelector = @selector(rectOfRow:),
@@ -2711,8 +2741,7 @@ var CPTableViewDefaultRowHeight = 23.0,
     var drawGradient = (_selectionHighlightStyle === CPTableViewSelectionHighlightStyleSourceList && [_selectedRowIndexes count] >= 1),
         hasHorizontalGrid = _gridStyleMask & CPTableViewSolidHorizontalGridLineMask,
         hasHorizontalSpacing = _intercellSpacing.width > 0,
-        lastColumnIndex = [self numberOfColumns] - 1,
-        affectedRect = CGRectNull;
+        lastColumnIndex = [self numberOfColumns] - 1;
 
     CGContextSetFillColor(context, _selectionHighlightColor);
     CGContextBeginPath(context);
@@ -2734,7 +2763,6 @@ var CPTableViewDefaultRowHeight = 23.0,
         }
         
         CGContextAddRect(context, rect);
-        affectedRect = CGRectUnion(affectedRect, rect);
 
         if (drawGradient)
         {
@@ -2770,11 +2798,6 @@ var CPTableViewDefaultRowHeight = 23.0,
     
     if (!drawGradient)
         CGContextFillPath(context);
-    
-    if (highlightingColumns)
-        [self _drawHorizontalGridInClipRect:affectedRect];
-        
-    [self _drawVerticalGridInClipRect:affectedRect];
 }
 
 - (void)layoutSubviews
@@ -3653,23 +3676,48 @@ var CPTableViewDataSourceKey                = @"CPTableViewDataSourceKey",
 @implementation _CPColumnDragDrawingView : CPView
 {
     CPTableView tableView   @accessors;
+    int         columnIndex @accessors;
 }
 
 - (void)drawRect:(CGRect)aRect
 {
-    var context = [[CPGraphicsContext currentContext] graphicsPort];
+    var context = [[CPGraphicsContext currentContext] graphicsPort],
+        columnRect = [tableView rectOfColumn:columnIndex],
+        headerHeight = _CGRectGetHeight([[tableView headerView] frame]),
+        bounds = [self bounds],
+        yScroll = _CGRectGetMinY([tableView _exposedRect]);
     
-    if ([tableView._selectedColumnIndexes count] >= 1)
+    // Because we are sharing drawing code with regular table drawing,
+    // we have to play a few tricks to draw a single column.
+    
+    // Shift the bounds origin to align with the column rect, and extend it vertically to ensure
+    // it reaches the bottom of the tableView when scrolled.
+    bounds.origin.x = _CGRectGetMinX(columnRect);
+    bounds.size.height += yScroll;
+    
+    // Fix up the drawing CTM to account for the header and scroll
+    CGContextTranslateCTM(context, -bounds.origin.x, headerHeight - yScroll);
+    
+    [tableView drawBackgroundInClipRect:bounds];
+    
+    if (tableView._draggedColumnIsSelected)
     {
-        
+        CGContextSetFillColor(context, tableView._selectionHighlightColor);
+        CGContextFillRect(context, bounds);
+    }
+    else
+    {
+        [tableView highlightSelectionInClipRect:bounds];
     }
     
-    var bounds = [self bounds],
-        minX = _CGRectGetMinX(bounds) + 0.5,
+    [tableView _autoDrawHorizontalGridInClipRect:bounds];
+    
+    var minX = _CGRectGetMinX(bounds) + 0.5,
         maxX = _CGRectGetMaxX(bounds) - 0.5;
     
     CGContextSetLineWidth(context, 1.0);
-    CGContextSetStrokeColor(tableView._gridColor);
+    CGContextSetAlpha(context, 1.0);
+    CGContextSetStrokeColor(context, tableView._gridColor);
     
     CGContextBeginPath(context);
     
