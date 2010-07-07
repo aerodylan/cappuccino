@@ -915,8 +915,7 @@ var CPTableViewDefaultRowHeight = 23.0,
     [self _updateHighlightWithOldColumns:previousSelectedIndexes newColumns:_selectedColumnIndexes];
     [_tableDrawView display]; // FIXME: should be setNeedsDisplayInRect:enclosing rect of new (de)selected columns
                               // but currently -drawRect: is not implemented here
-    if (_headerView)
-        [_headerView setNeedsDisplay:YES];
+    [_headerView setNeedsDisplay:YES];
 
     [self _noteSelectionDidChange];
 }
@@ -956,8 +955,7 @@ var CPTableViewDefaultRowHeight = 23.0,
         [self _updateHighlightWithOldColumns:_selectedColumnIndexes newColumns:[CPIndexSet indexSet]];
         _selectedColumnIndexes = [CPIndexSet indexSet];
         
-        if (_headerView)
-            [_headerView setNeedsDisplay:YES];
+        [_headerView setNeedsDisplay:YES];
     }
 
     var newSelectedIndexes;
@@ -2129,14 +2127,21 @@ var CPTableViewDefaultRowHeight = 23.0,
     [dragView setTableView:self];
     [dragView setColumnIndex:theColumnIndex];
     [dragView setAlphaValue:0.6];
+    
+    // Clip the bounds to the visible edge of the table
+    var rect = CGRectIntersection(columnRect, exposedRect);
+    
+    bounds.size.width = _CGRectGetWidth(rect);
     [dragView setFrame:bounds];
+    
+    [[self superview] addSubview:dragView];
 
     return dragView;
 }
 
 - (void)setDraggingSourceOperationMask:(CPDragOperation)mask forLocal:(BOOL)isLocal
 {
-    //ignoral local for the time being since only one capp app can run at a time...
+    // ignore local for the time being since only one capp app can run at a time...
     _dragOperationDefaultMask = mask;
 }
 
@@ -2169,7 +2174,7 @@ var CPTableViewDefaultRowHeight = 23.0,
 */
 - (void)setDraggingDestinationFeedbackStyle:(CPTableViewDraggingDestinationFeedbackStyle)aStyle
 {
-    //FIX ME: this should vary up the highlight color, currently nothing is being done with it
+    // FIX ME: this should vary up the highlight color, currently nothing is being done with it
     _destinationDragStyle = aStyle;
 }
 

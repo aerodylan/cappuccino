@@ -60,6 +60,8 @@
     [_textField setTextShadowOffset:_CGSizeMake(0,1)];
 
     [self addSubview:_textField];
+    
+    _isDragging = NO;
 }
 
 - (void)layoutSubviews
@@ -125,7 +127,7 @@
     
     if (!CGRectIntersectsRect(aRect, bounds))
         return;
-        
+    
     var context = [[CPGraphicsContext currentContext] graphicsPort],
         maxX = _CGRectGetMaxX(bounds) - 0.5;
 
@@ -145,6 +147,7 @@
 var _CPTableColumnHeaderViewStringValueKey = @"_CPTableColumnHeaderViewStringValueKey",
     _CPTableColumnHeaderViewFontKey = @"_CPTableColumnHeaderViewFontKey",
     _CPTableColumnHeaderViewImageKey = @"_CPTableColumnHeaderViewImageKey";
+    _CPTableColumnHeaderViewIsDraggingKey = @"_CPTableColumnHeaderViewIsDraggingKey";
 
 @implementation _CPTableColumnHeaderView (CPCoding)
 
@@ -156,6 +159,9 @@ var _CPTableColumnHeaderViewStringValueKey = @"_CPTableColumnHeaderViewStringVal
         [self _setIndicatorImage:[aCoder decodeObjectForKey:_CPTableColumnHeaderViewImageKey]];
         [self setStringValue:[aCoder decodeObjectForKey:_CPTableColumnHeaderViewStringValueKey]];
         [self setFont:[aCoder decodeObjectForKey:_CPTableColumnHeaderViewFontKey]];
+        [self setFont:[aCoder decodeObjectForKey:_CPTableColumnHeaderViewFontKey]];
+        
+        _isDragging = [aCoder decodeBoolForKey:_CPTableColumnHeaderViewIsDraggingKey]
     }
 
     return self;
@@ -168,6 +174,7 @@ var _CPTableColumnHeaderViewStringValueKey = @"_CPTableColumnHeaderViewStringVal
     [aCoder encodeObject:[_textField text] forKey:_CPTableColumnHeaderViewStringValueKey];
     [aCoder encodeObject:[_textField image] forKey:_CPTableColumnHeaderViewImageKey];
     [aCoder encodeObject:[_textField font] forKey:_CPTableColumnHeaderViewFontKey];
+    [aCoder encodeBool:_isDragging forKey:_CPTableColumnHeaderViewIsDraggingKey];
 }
 
 @end
@@ -442,6 +449,13 @@ var CPTableHeaderViewResizeZone = 3.0,
     _pressedColumn = _activeColumn;
 
     [_tableView _setDraggedColumn:_activeColumn];
+    
+    [self setNeedsDisplay:YES];
+}
+
+- (int)draggedColumn
+{
+    return isDragging ? _activeColumn : -1;
 }
 
 - (BOOL)isDragging
@@ -452,8 +466,13 @@ var CPTableHeaderViewResizeZone = 3.0,
 - (void)draggedView:(CPView)aView beganAt:(CGPoint)aPoint
 {
     _isDragging = YES;
-
-    [[[[_tableView tableColumns] objectAtIndex:_activeColumn] headerView] setHidden:YES];
+    
+    // Hide the subviews, leave the chrome
+    var headerView = [[[_tableView tableColumns] objectAtIndex:_activeColumn] headerView];
+    
+    [[headerView subviews] makeObjectsPerformSelector:@selector(setHidden:) withObject:YES];
+    [headerView unsetThemeState:CPThemeStateHighlighted | CPThemeStateSelected];
+    
     [_tableView _setDraggedColumn:_activeColumn];
     
     [[CPCursor closedHandCursor] set];
@@ -463,6 +482,9 @@ var CPTableHeaderViewResizeZone = 3.0,
 
 - (void)draggedView:(CPView)aView movedTo:(CGPoint)aPoint
 {
+    var viewRect = [aView frame],
+        superRect = [[aView superview] frame];
+
     [self _constrainDragView:aView at:aPoint];
 
     var dragWindow = [aView window],
@@ -501,7 +523,11 @@ var CPTableHeaderViewResizeZone = 3.0,
     _isTrackingColumn = NO; // We need to do this explicitly because the mouse up section of trackMouse is never reached
 
     [_tableView _setDraggedColumn:-1];
-    [[[[_tableView tableColumns] objectAtIndex:_activeColumn] headerView] setHidden:NO];
+
+    var subviews = [[[[_tableView tableColumns] objectAtIndex:_activeColumn] headerView] subviews];
+    
+    [subviews makeObjectsPerformSelector:@selector(setHidden:) withObject:NO];
+
     [self _stopTrackingTableColumn:_activeColumn at:aLocation];
     
     [[CPCursor arrowCursor] set];
