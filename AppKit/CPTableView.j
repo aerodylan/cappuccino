@@ -267,10 +267,6 @@ var CPTableViewDefaultRowHeight = 23.0,
         [self setGridColor:[CPColor colorWithHexString:@"c0c0c0"]];
         [self setGridStyleMask:CPTableViewGridNone];
 
-        _headerView = [[CPTableHeaderView alloc] initWithFrame:_CGRectMake(0, 0, [self bounds].size.width, _rowHeight)];
-
-        [_headerView setTableView:self];
-
         _cornerView = nil; //[[_CPCornerView alloc] initWithFrame:_CGRectMake(0, 0, [CPScroller scrollerWidth], _CGRectGetHeight([_headerView frame]))];
 
         _lastSelectedRow = -1;
@@ -2078,21 +2074,41 @@ var CPTableViewDefaultRowHeight = 23.0,
 
 /*!
     @ignore
-    // Fetches all the data views (from the datasource) for the column and it's visible rows
-    // Copy the dataviews add them to a transparent drag view and use that drag view
-    // to make it appear we are dragging images of those rows (as you would do in regular Cocoa)
+    // Fetches all the data views (from the datasource) for the column and it's visible rows.
+    // Copy the dataviews and add them to a transparent drag view and use that drag view
+    // to make it appear we are dragging images of those rows (as you would do in regular Cocoa).
 */
-- (CPView)_dragViewForColumn:(int)theColumnIndex event:(CPEvent)theDragEvent offset:(CGPoint)theDragViewOffset
+- (CPView)_dragViewForColumn:(int)theColumnIndex
 {
-    var dragView = [[_CPColumnDragDrawingView alloc] initWithFrame:_CGRectMakeZero()];
-        tableColumn = [[self tableColumns] objectAtIndex:theColumnIndex],
-        headerHeight = _CGRectGetHeight([_headerView frame]),
+    var headerFrame = [_headerView frame],
         exposedRect = [self _exposedRect],
-        bounds = _CGRectMake(0.0, 0.0, [tableColumn width] + _intercellSpacing.width, _CGRectGetHeight(exposedRect) + headerHeight),
         columnRect = [self rectOfColumn:theColumnIndex],
-        headerView = [tableColumn headerView];
+        tableColumn = [[self tableColumns] objectAtIndex:theColumnIndex],
+        columnHeaderView = [tableColumn headerView],
+        columnHeaderFrame = [columnHeaderView frame],
+        frame = _CGRectMake(_CGRectGetMinX(columnRect), 0.0, 
+                            _CGRectGetWidth(columnHeaderFrame),
+                            _CGRectGetHeight(exposedRect) + _CGRectGetHeight(headerFrame));
 
-    row = [_exposedRows firstIndex];
+    // We need a wrapper view around the header and column, this is what will be dragged
+    var dragView = [[_CPColumnDragDrawingView alloc] initWithFrame:frame];
+    
+    [dragView setTableView:self];
+    [dragView setColumnIndex:theColumnIndex];
+    [dragView setBackgroundColor:[CPColor clearColor]];
+    [dragView setAlphaValue:0.6];
+    
+    // Now a view that clips the column data views, which itself is clipped to the content view
+    var visibleRect = CGRectIntersection(columnRect, exposedRect);
+    
+    frame = _CGRectMake(0.0, _CGRectGetHeight(headerFrame), _CGRectGetWidth(visibleRect), _CGRectGetHeight(exposedRect)),
+    var columnClipView = [[CPView alloc] initWithFrame:frame];
+    
+    [dragView addSubview:columnClipView];
+    [dragView setColumnClipView:columnClipView];
+    
+    var row = [_exposedRows firstIndex],
+        columnIsSelected = [self isColumnSelected:theColumnIndex];
     
     while (row !== CPNotFound)
     {
@@ -2103,39 +2119,34 @@ var CPTableViewDefaultRowHeight = 23.0,
         dataViewFrame.origin.x = 0.0;
 
         // Offset by table header height - scroll position
-        dataViewFrame.origin.y += headerHeight - _CGRectGetMinY(exposedRect);
+        dataViewFrame.origin.y -= _CGRectGetMinY(exposedRect);
         [dataView setFrame:dataViewFrame];
 
         [dataView setObjectValue:[self _objectValueForTableColumn:tableColumn row:row]];
-        [dragView addSubview:dataView];
+
+        if (columnIsSelected || [self isRowSelected:row])
+            [dataView setThemeState:CPThemeStateSelectedDataView];
+        else
+            [dataView unsetThemeState:CPThemeStateSelectedDataView];
+            
+        [columnClipView addSubview:dataView];
 
         row = [_exposedRows indexGreaterThanIndex:row];
     }
 
     // Add the column header view
-    var headerFrame = [headerView frame];
-    headerFrame.origin = _CGPointMakeZero();
-
-    columnHeaderView = [[_CPTableColumnHeaderView alloc] initWithFrame:headerFrame];
-    [columnHeaderView setStringValue:[headerView stringValue]];
-    [columnHeaderView setThemeState:[headerView themeState]];
-    [dragView addSubview:columnHeaderView];
+    columnHeaderFrame.origin = _CGPointMakeZero();
+    var dragColumnHeaderView = [[_CPTableColumnHeaderView alloc] initWithFrame:columnHeaderFrame];
     
+    [dragColumnHeaderView setStringValue:[columnHeaderView stringValue]];
+    [dragColumnHeaderView setThemeState:[columnHeaderView themeState]];
+    
+    [dragView addSubview:dragColumnHeaderView];
+    
+    // While dragging, the column is deselected in the table view
     _draggedColumnIsSelected = [_selectedColumnIndexes containsIndex:theColumnIndex];
     [_selectedColumnIndexes removeIndex:theColumnIndex];
-
-    [dragView setTableView:self];
-    [dragView setColumnIndex:theColumnIndex];
-    [dragView setAlphaValue:0.6];
     
-    // Clip the bounds to the visible edge of the table
-    var rect = CGRectIntersection(columnRect, exposedRect);
-    
-    bounds.size.width = _CGRectGetWidth(rect);
-    [dragView setFrame:bounds];
-    
-    [[self superview] addSubview:dragView];
-
     return dragView;
 }
 
@@ -2390,7 +2401,7 @@ var CPTableViewDefaultRowHeight = 23.0,
 
         var rowIndex = 0,
             rowsCount = rowArray.length,
-            isColumnSelected = [_selectedColumnIndexes containsIndex:column];
+            columnIsSelected = [_selectedColumnIndexes containsIndex:column];
         
         for (; rowIndex < rowsCount; ++rowIndex)
         {
@@ -2407,7 +2418,7 @@ var CPTableViewDefaultRowHeight = 23.0,
             // It will do nothing if there is no value binding set.
             [tableColumn prepareDataView:dataView forRow:row];
 
-            if (isColumnSelected || [self isRowSelected:row])
+            if (columnIsSelected || [self isRowSelected:row])
                 [dataView setThemeState:CPThemeStateSelectedDataView];
             else
                 [dataView unsetThemeState:CPThemeStateSelectedDataView];
@@ -3678,10 +3689,12 @@ var CPTableViewDataSourceKey                = @"CPTableViewDataSourceKey",
 
 @end
 
+
 @implementation _CPColumnDragDrawingView : CPView
 {
-    CPTableView tableView   @accessors;
-    int         columnIndex @accessors;
+    CPTableView tableView       @accessors;
+    int         columnIndex     @accessors;
+    CPView      columnClipView  @accessors;
 }
 
 - (void)drawRect:(CGRect)aRect
@@ -3689,18 +3702,19 @@ var CPTableViewDataSourceKey                = @"CPTableViewDataSourceKey",
     var context = [[CPGraphicsContext currentContext] graphicsPort],
         columnRect = [tableView rectOfColumn:columnIndex],
         headerHeight = _CGRectGetHeight([[tableView headerView] frame]),
-        bounds = [self bounds],
+        bounds = [columnClipView bounds],
         yScroll = _CGRectGetMinY([tableView _exposedRect]);
     
     // Because we are sharing drawing code with regular table drawing,
-    // we have to play a few tricks to draw a single column.
+    // we have to play a few tricks to fool the drawing code into thinking
+    // our drag column is in the same place as the real column.
     
     // Shift the bounds origin to align with the column rect, and extend it vertically to ensure
     // it reaches the bottom of the tableView when scrolled.
     bounds.origin.x = _CGRectGetMinX(columnRect);
     bounds.size.height += yScroll;
     
-    // Fix up the drawing CTM to account for the header and scroll
+    // Fix up the CTM to account for the header and scroll
     CGContextTranslateCTM(context, -bounds.origin.x, headerHeight - yScroll);
     
     [tableView drawBackgroundInClipRect:bounds];
