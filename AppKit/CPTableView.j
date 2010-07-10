@@ -2086,7 +2086,7 @@ var CPTableViewDefaultRowHeight = 23.0,
         tableColumn = [[self tableColumns] objectAtIndex:theColumnIndex],
         columnHeaderView = [tableColumn headerView],
         columnHeaderFrame = [columnHeaderView frame],
-        frame = _CGRectMake(_CGRectGetMinX(columnRect), 0.0, 
+        frame = _CGRectMake(_CGRectGetMinX(columnRect) - _CGRectGetMinX(exposedRect), 0.0, 
                             _CGRectGetWidth(columnHeaderFrame),
                             _CGRectGetHeight(exposedRect) + _CGRectGetHeight(headerFrame));
 
@@ -3703,7 +3703,9 @@ var CPTableViewDataSourceKey                = @"CPTableViewDataSourceKey",
         columnRect = [tableView rectOfColumn:columnIndex],
         headerHeight = _CGRectGetHeight([[tableView headerView] frame]),
         bounds = [columnClipView bounds],
-        yScroll = _CGRectGetMinY([tableView _exposedRect]);
+        exposedRect = [tableView _exposedRect],
+        xScroll = _CGRectGetMinX(exposedRect),
+        yScroll = _CGRectGetMinY(exposedRect);
     
     // Because we are sharing drawing code with regular table drawing,
     // we have to play a few tricks to fool the drawing code into thinking
@@ -3711,7 +3713,7 @@ var CPTableViewDataSourceKey                = @"CPTableViewDataSourceKey",
     
     // Shift the bounds origin to align with the column rect, and extend it vertically to ensure
     // it reaches the bottom of the tableView when scrolled.
-    bounds.origin.x = _CGRectGetMinX(columnRect);
+    bounds.origin.x = _CGRectGetMinX(columnRect) - xScroll;
     bounds.size.height += yScroll;
     
     // Fix up the CTM to account for the header and scroll
