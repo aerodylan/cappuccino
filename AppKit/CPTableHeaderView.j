@@ -194,8 +194,6 @@ var CPTableHeaderViewResizeZone = 3.0,
     CPView      _columnDragView;
     CPView      _columnDragClipView;
     
-    BOOL        _draggedColumnWasSelected;
-                
     float       _columnOldWidth;
                     
     CPTableView _tableView @accessors(property=tableView);
@@ -439,7 +437,6 @@ var CPTableHeaderViewResizeZone = 3.0,
     [[headerView subviews] makeObjectsPerformSelector:@selector(setHidden:) withObject:YES];
     
     // The underlying column header shows normal state
-    _draggedColumnWasSelected = [headerView themeState] & CPThemeStateSelected;
     [headerView unsetThemeState:CPThemeStateHighlighted | CPThemeStateSelected];
     
     [_tableView _setDraggedColumn:aColumnIndex];
@@ -493,8 +490,8 @@ var CPTableHeaderViewResizeZone = 3.0,
     var headerView = [[[_tableView tableColumns] objectAtIndex:aColumnIndex] headerView];
     
     [[headerView subviews] makeObjectsPerformSelector:@selector(setHidden:) withObject:NO];
-    
-    if (_draggedColumnWasSelected)
+
+    if (_tableView._draggedColumnIsSelected)
         [headerView setThemeState:CPThemeStateSelected];
     
     [[CPCursor arrowCursor] set];
