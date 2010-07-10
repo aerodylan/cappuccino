@@ -586,7 +586,7 @@ var CPScrollViewBorderInsetTop    = 0,
             CGContextStrokePath(aContext);
             break;
             
-        case CPGrooveBorder:            
+        case CPGrooveBorder:
             CGContextBeginPath(aContext);
             CGContextSetStrokeColor(aContext, [CPColor colorWithWhite:159.0/255.0 alpha:1.0]);
             
@@ -615,11 +615,11 @@ var CPScrollViewBorderInsetTop    = 0,
             CGContextBeginPath(aContext);
             CGContextSetStrokeColor(aContext, [CPColor whiteColor]);
             
-            var rect = _CGRectInset(_CGRectOffset(strokeRect, 1.0, 1.0), 0.5, 0.5);
+            var rect = _CGRectOffset(strokeRect, 1.0, 1.0);
             
             rect.size.width -= 1.0;
             rect.size.height -= 1.0;
-            CGContextStrokeRect(aContext, rect);
+            CGContextStrokeRect(aContext, _CGRectInset(rect, 0.5, 0.5));
             
             if (!_CGRectIsEmpty([self _headerClipViewFrame]))
             {
