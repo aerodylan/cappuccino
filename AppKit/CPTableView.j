@@ -1089,7 +1089,7 @@ var CPTableViewDefaultRowHeight = 23.0,
 
 - (CPIndexSet)selectedRowIndexes
 {
-    return _selectedRowIndexes;
+    return [_selectedRowIndexes copy];
 }
 
 - (void)deselectColumn:(CPInteger)aColumn
