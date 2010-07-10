@@ -2082,11 +2082,13 @@ var CPTableViewDefaultRowHeight = 23.0,
 {
     var headerFrame = [_headerView frame],
         exposedRect = [self _exposedRect],
+        xScroll = _CGRectGetMinX(exposedRect),
         columnRect = [self rectOfColumn:theColumnIndex],
         tableColumn = [[self tableColumns] objectAtIndex:theColumnIndex],
         columnHeaderView = [tableColumn headerView],
         columnHeaderFrame = [columnHeaderView frame],
-        frame = _CGRectMake(_CGRectGetMinX(columnRect) - _CGRectGetMinX(exposedRect), 0.0, 
+        frame = _CGRectMake(MAX(_CGRectGetMinX(columnRect) - _CGRectGetMinX(exposedRect), 0.0), 
+                            0.0, 
                             _CGRectGetWidth(columnHeaderFrame),
                             _CGRectGetHeight(exposedRect) + _CGRectGetHeight(headerFrame));
 
@@ -2106,17 +2108,17 @@ var CPTableViewDefaultRowHeight = 23.0,
     
     [dragView addSubview:columnClipView];
     [dragView setColumnClipView:columnClipView];
+    _draggedColumnIsSelected = [self isColumnSelected:theColumnIndex];
     
     var row = [_exposedRows firstIndex],
-        columnIsSelected = [self isColumnSelected:theColumnIndex];
+        xOffset = _CGRectGetMinX(columnRect) - xScroll < 0.0 ? -xScroll : 0.0;
     
     while (row !== CPNotFound)
     {
         var dataView = [self _newDataViewForRow:row tableColumn:tableColumn],
             dataViewFrame = [self frameOfDataViewAtColumn:theColumnIndex row:row];
 
-        // Only one column is ever dragged so we just place the view at the left edge
-        dataViewFrame.origin.x = 0.0;
+        dataViewFrame.origin.x = xOffset;
 
         // Offset by table header height - scroll position
         dataViewFrame.origin.y -= _CGRectGetMinY(exposedRect);
@@ -2124,7 +2126,7 @@ var CPTableViewDefaultRowHeight = 23.0,
 
         [dataView setObjectValue:[self _objectValueForTableColumn:tableColumn row:row]];
 
-        if (columnIsSelected || [self isRowSelected:row])
+        if (_draggedColumnIsSelected || [self isRowSelected:row])
             [dataView setThemeState:CPThemeStateSelectedDataView];
         else
             [dataView unsetThemeState:CPThemeStateSelectedDataView];
@@ -2136,15 +2138,21 @@ var CPTableViewDefaultRowHeight = 23.0,
 
     // Add the column header view
     columnHeaderFrame.origin = _CGPointMakeZero();
-    var dragColumnHeaderView = [[_CPTableColumnHeaderView alloc] initWithFrame:columnHeaderFrame];
-    
+        
+    var dragColumnHeaderView = [[_CPTableColumnHeaderView alloc] initWithFrame:columnHeaderFrame],
+        sortDescriptor = [_sortDescriptors objectAtIndex:theColumnIndex],
+        image = [columnHeaderView _indicatorImage];
+            
     [dragColumnHeaderView setStringValue:[columnHeaderView stringValue]];
     [dragColumnHeaderView setThemeState:[columnHeaderView themeState]];
+    [dragColumnHeaderView _setIndicatorImage:image];
+    
+    // Give it a tag so it can be found later
+    [dragColumnHeaderView setTag:CPTableHeaderViewDragColumnHeaderTag];
     
     [dragView addSubview:dragColumnHeaderView];
     
     // While dragging, the column is deselected in the table view
-    _draggedColumnIsSelected = [_selectedColumnIndexes containsIndex:theColumnIndex];
     [_selectedColumnIndexes removeIndex:theColumnIndex];
     
     return dragView;

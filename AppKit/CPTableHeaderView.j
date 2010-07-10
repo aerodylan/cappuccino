@@ -121,6 +121,11 @@
 	}
 }
 
+- (CPImage)_indicatorImage
+{
+    return [_textField imagePosition] === CPNoImage ? nil : [_textField image];
+}
+
 - (void)drawRect:(CGRect)aRect
 {
     var bounds = [self bounds];
@@ -176,11 +181,15 @@ var _CPTableColumnHeaderViewStringValueKey = @"_CPTableColumnHeaderViewStringVal
 
 @end
 
+CPTableHeaderViewDragColumnHeaderTag = 1;
+
 var CPTableHeaderViewResizeZone = 3.0,
     CPTableHeaderViewDragTolerance = 10.0;
 
 @implementation CPTableHeaderView : CPView
 {
+    CGPoint     _mouseDownLocation;
+    CGPoint     _columnMouseDownLocation;
     CGPoint     _mouseEnterExitLocation;
     CGPoint     _previousTrackingLocation;
                 
@@ -192,6 +201,7 @@ var CPTableHeaderViewResizeZone = 3.0,
     BOOL        _canDragColumn;
                 
     CPView      _columnDragView;
+    CPView      _columnDragHeaderView;
     CPView      _columnDragClipView;
     
     float       _columnOldWidth;
@@ -201,6 +211,8 @@ var CPTableHeaderViewResizeZone = 3.0,
 
 - (void)_init
 {
+    _mouseDownLocation = _CGPointMakeZero();
+    _columnMouseDownLocation = _CGPointMakeZero();
     _mouseEnterExitLocation = _CGPointMakeZero();
     _previousTrackingLocation = _CGPointMakeZero();
     
@@ -316,10 +328,12 @@ var CPTableHeaderViewResizeZone = 3.0,
         
     if (_isResizing)
     {
+        [self _autoscroll:theEvent localLocation:currentLocation];
         [self _continueResizingTableColumn:_activeColumn at:currentLocation];
     }
     else if (_isDragging)
     {
+        [self _autoscroll:theEvent localLocation:currentLocation];
         [self _dragTableColumn:_activeColumn to:currentLocation];
     }
     else // tracking a press, could become a drag
@@ -364,6 +378,24 @@ var CPTableHeaderViewResizeZone = 3.0,
     return _canDragColumn && [_tableView allowsColumnReordering] && ABS(aPoint.x - _mouseDownLocation.x) >= CPTableHeaderViewDragTolerance;
 }
 
+- (void)_autoscroll:(CPEvent)theEvent localLocation:(CGPoint)theLocation
+{
+    // Constrain the y coordinate to be within the header, we don't want to autoscroll vertically
+    var constrainedLocation = _CGPointMake(theLocation.x, 0.0),
+        constrainedEvent = [CPEvent mouseEventWithType:CPLeftMouseDragged
+                                             location:[self convertPoint:constrainedLocation toView:nil]
+                                        modifierFlags:[theEvent modifierFlags]
+                                            timestamp:[theEvent timestamp]
+                                         windowNumber:[theEvent windowNumber]
+                                              context:[theEvent context]
+                                          eventNumber:[theEvent eventNumber]
+                                           clickCount:[theEvent clickCount]
+                                             pressure:[theEvent pressure]];
+                                        
+    [self autoscroll:constrainedEvent];
+    [_tableView autoscroll:constrainedEvent];
+}
+
 - (CGRect)_headerRectOfLastVisibleColumn
 {
     var tableColumns = [_tableView tableColumns],
@@ -383,9 +415,11 @@ var CPTableHeaderViewResizeZone = 3.0,
 - (CGPoint)_constrainDragPoint:(CGPoint)aPoint
 {
     // This effectively clamps the value between the minimum and maximum
-    var lastColumnRect = [self _headerRectOfLastVisibleColumn],
+    var exposedRect = [_tableView _exposedRect],
+        lastColumnRect = [self _headerRectOfLastVisibleColumn],
         activeColumnRect = [self headerRectOfColumn:_activeColumn],
-        point = _CGPointMake(MAX(0.0, MIN(aPoint.x, _CGRectGetMaxX(lastColumnRect) - _CGRectGetWidth(activeColumnRect))), aPoint.y);
+        maxX = _CGRectGetMaxX(lastColumnRect) - _CGRectGetWidth(activeColumnRect) - _CGRectGetMinX(exposedRect),
+        point = _CGPointMake(MAX(MIN(aPoint.x, maxX), -CGRectGetMinX(exposedRect)), aPoint.y);
 
     return point;
 }
@@ -439,6 +473,10 @@ var CPTableHeaderViewResizeZone = 3.0,
     // The underlying column header shows normal state
     [headerView unsetThemeState:CPThemeStateHighlighted | CPThemeStateSelected];
     
+    // Keep track of the location within the column header where the original mousedown occurred
+    _columnDragHeaderView = [_columnDragView viewWithTag:CPTableHeaderViewDragColumnHeaderTag];
+    _columnMouseDownLocation = [self convertPoint:_mouseDownLocation toView:_columnDragHeaderView];
+
     [_tableView _setDraggedColumn:aColumnIndex];
     
     [[CPCursor closedHandCursor] set];
@@ -449,31 +487,36 @@ var CPTableHeaderViewResizeZone = 3.0,
 - (void)_dragTableColumn:(int)aColumnIndex to:(CGPoint)aPoint
 {
     var delta = aPoint.x - _previousTrackingLocation.x,
-        dragFrame = [_columnDragView frame],
-        newOrigin = _CGPointMake(_CGRectGetMinX(dragFrame) + delta, _CGRectGetMinY(dragFrame));
-    
-    newOrigin = [self _constrainDragPoint:newOrigin];
-    [_columnDragView setFrameOrigin:newOrigin];
-    
-    // When the edge of the dragged column passes the midpoint of an adjacent column, they swap
-    var hoverPoint = _CGPointMakeCopy(aPoint);
-
-    if (delta > 0)
-        hoverPoint.x = _CGRectGetMaxX(dragFrame);
-    else
-        hoverPoint.x = _CGRectGetMinX(dragFrame);
-    
-    var hoveredColumn = [self columnAtPoint:hoverPoint];
-
-    if (hoveredColumn !== -1)
+        columnPoint = [_columnDragHeaderView convertPoint:aPoint fromView:self];
+        
+    // Only move if the mouse is past the original click point in the direction of movement
+    if ((delta > 0 && columnPoint.x > _columnMouseDownLocation.x) || (delta < 0 && columnPoint.x < _columnMouseDownLocation.x))
     {
-        var columnRect = [self headerRectOfColumn:hoveredColumn],
-            columnCenterPoint = _CGPointMake(_CGRectGetMidX(columnRect), _CGRectGetMidY(columnRect));
+        var dragFrame = [_columnDragView frame],
+            newOrigin = [self _constrainDragPoint:_CGPointMake(_CGRectGetMinX(dragFrame) + delta, _CGRectGetMinY(dragFrame))];
+    
+        [_columnDragView setFrameOrigin:newOrigin];
+    
+        // When the edge of the dragged column passes the midpoint of an adjacent column, they swap
+        var hoverPoint = _CGPointMakeCopy(aPoint);
+
+        if (delta > 0)
+            hoverPoint.x = _CGRectGetMaxX(dragFrame);
+        else
+            hoverPoint.x = _CGRectGetMinX(dragFrame);
+    
+        var hoveredColumn = [self columnAtPoint:hoverPoint];
+
+        if (hoveredColumn !== -1)
+        {
+            var columnRect = [self headerRectOfColumn:hoveredColumn],
+                columnCenterPoint = _CGPointMake(_CGRectGetMidX(columnRect), _CGRectGetMidY(columnRect));
             
-        if (hoveredColumn < _activeColumn && hoverPoint.x < columnCenterPoint.x)
-            [self _moveColumn:_activeColumn toColumn:hoveredColumn];
-        else if (hoveredColumn > _activeColumn && hoverPoint.x > columnCenterPoint.x)
-            [self _moveColumn:_activeColumn toColumn:hoveredColumn];
+            if (hoveredColumn < _activeColumn && hoverPoint.x < columnCenterPoint.x)
+                [self _moveColumn:_activeColumn toColumn:hoveredColumn];
+            else if (hoveredColumn > _activeColumn && hoverPoint.x > columnCenterPoint.x)
+                [self _moveColumn:_activeColumn toColumn:hoveredColumn];
+        }
     }
 
     _previousTrackingLocation = aPoint;
