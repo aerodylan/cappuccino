@@ -557,6 +557,8 @@ var CPTableHeaderViewResizeZone = 3.0,
 
     var tableColumn = [[_tableView tableColumns] objectAtIndex:aColumnIndex];
 
+    _columnOldWidth = [tableColumn width];
+    
     [tableColumn setDisableResizingPosting:YES];
     [_tableView setDisableAutomaticResizing:YES];
 }
@@ -588,7 +590,6 @@ var CPTableHeaderViewResizeZone = 3.0,
         
     if ((delta > 0 && aPoint.x > columnMaxX) || (delta < 0 && aPoint.x < columnMaxX))
     {
-        _tableView._lastColumnShouldSnap = NO;
         [tableColumn setWidth:newWidth - spacing];
 
         [self setNeedsLayout];
@@ -602,7 +603,9 @@ var CPTableHeaderViewResizeZone = 3.0,
 {
     var tableColumn = [[_tableView tableColumns] objectAtIndex:aColumnIndex];
     
-    [tableColumn _postDidResizeNotificationWithOldWidth:_columnOldWidth];
+    if ([tableColumn width] != _columnOldWidth)
+        [tableColumn _postDidResizeNotificationWithOldWidth:_columnOldWidth];
+        
     [tableColumn setDisableResizingPosting:NO];
     [_tableView setDisableAutomaticResizing:NO];
 
@@ -626,7 +629,7 @@ var CPTableHeaderViewResizeZone = 3.0,
     {
         var tableColumn = [[_tableView tableColumns] objectAtIndex:overColumn],
             spacing = [_tableView intercellSpacing].width,
-            width = [tableColumn width] + spacing,
+            width = [tableColumn width],
 
         if (width <= [tableColumn minWidth])
             [[CPCursor resizeRightCursor] set];
