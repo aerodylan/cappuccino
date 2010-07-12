@@ -111,11 +111,7 @@ var CPScrollViewBorderInsetTop    = 0,
             break;
             
         case CPGrooveBorder:
-            _borderInsets = [2.0, 2.0, 2.0, 2.0];
-            
-            if (!_CGRectIsEmpty([self _headerClipViewFrame]))
-                ++_borderInsets[CPScrollViewBorderInsetTop];
-                
+            _borderInsets = [3.0, 2.0, 2.0, 2.0];
             break;
         
         case CPNoBorder:
@@ -186,7 +182,6 @@ var CPScrollViewBorderInsetTop    = 0,
 
     // FIXME: This should be observed.
     [self _updateCornerAndHeaderView];
-    [self reflectScrolledClipView:_contentView];
 }
 
 - (void)reflectScrolledClipView:(CPClipView)aClipView
@@ -482,7 +477,7 @@ var CPScrollViewBorderInsetTop    = 0,
         if (_cornerView)
             [self addSubview:_cornerView];
     }
-
+    
     [self reflectScrolledClipView:_contentView];
 }
 
@@ -621,17 +616,14 @@ var CPScrollViewBorderInsetTop    = 0,
             rect.size.height -= 1.0;
             CGContextStrokeRect(aContext, _CGRectInset(rect, 0.5, 0.5));
             
-            if (!_CGRectIsEmpty([self _headerClipViewFrame]))
-            {
-                CGContextBeginPath(aContext);
-                CGContextSetStrokeColor(aContext, [CPColor colorWithWhite:192.0/255.0 alpha:1.0]);
-            
-                y = _CGRectGetMinY(strokeRect) + 2.5;
-            
-                CGContextMoveToPoint(aContext, _CGRectGetMinX(strokeRect) + 2.0, y);
-                CGContextAddLineToPoint(aContext, _CGRectGetMaxX(strokeRect) - 2.0, y);
-                CGContextStrokePath(aContext);
-            }
+            CGContextBeginPath(aContext);
+            CGContextSetStrokeColor(aContext, [CPColor colorWithWhite:192.0/255.0 alpha:1.0]);
+        
+            y = _CGRectGetMinY(strokeRect) + 2.5;
+        
+            CGContextMoveToPoint(aContext, _CGRectGetMinX(strokeRect) + 2.0, y);
+            CGContextAddLineToPoint(aContext, _CGRectGetMaxX(strokeRect) - 2.0, y);
+            CGContextStrokePath(aContext);
             break;
 
         default:
