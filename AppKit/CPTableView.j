@@ -66,6 +66,10 @@ var CPTableViewDelegate_selectionShouldChangeInTableView_                       
     CPTableViewDelegate_tableViewSelectionDidChange_                                                    = 1 << 18,
     CPTableViewDelegate_tableViewSelectionIsChanging_                                                   = 1 << 19;
 
+var CPTableViewResizeFirstColumn = 1,
+    CPTableViewResizeLastColumn = 2,
+    CPTableViewResizeLastVisibleColumn = 3;
+    
 //CPTableViewDraggingDestinationFeedbackStyles
 CPTableViewDraggingDestinationFeedbackStyleNone = -1;
 CPTableViewDraggingDestinationFeedbackStyleRegular = 0;
@@ -90,7 +94,7 @@ CPTableViewSolidVerticalGridLineMask   = 1 << 0;
 CPTableViewSolidHorizontalGridLineMask = 1 << 1;
 
 CPTableViewNoColumnAutoresizing = 0;
-CPTableViewUniformColumnAutoresizingStyle = 1; // FIX ME: This is FUBAR
+CPTableViewUniformColumnAutoresizingStyle = 1;
 CPTableViewSequentialColumnAutoresizingStyle = 2;
 CPTableViewReverseSequentialColumnAutoresizingStyle = 3;
 CPTableViewLastColumnOnlyAutoresizingStyle = 4;
@@ -219,7 +223,6 @@ var CPTableViewDefaultRowHeight = 23.0,
     CPDragOperation             _retargetedDropOperation;
 
     BOOL        _disableAutomaticResizing @accessors(property=disableAutomaticResizing);
-    BOOL        _lastColumnShouldSnap;
 
     CPGradient  _sourceListActiveGradient;
     CPColor     _sourceListActiveTopLineColor;
@@ -289,7 +292,6 @@ var CPTableViewDefaultRowHeight = 23.0,
     return self;
 }
 
-// FIX ME: we have a lot of redundent init stuff in initWithFrame: and initWithCoder: we should move it all into here.
 - (void)_init
 {
     _disableAutomaticResizing = NO;
@@ -298,12 +300,10 @@ var CPTableViewDefaultRowHeight = 23.0,
     _selectedColumnIndexes = [CPIndexSet indexSet];
     _selectedRowIndexes = [CPIndexSet indexSet];
 
-    _lastColumnShouldSnap = NO;
-
     if (!_alternatingRowBackgroundColors)
         _alternatingRowBackgroundColors = [[CPColor whiteColor], [CPColor colorWithHexString:@"e4e7ff"]];
 
-    _selectionHighlightColor = [CPColor colorWithHexString:@"3875d7"];
+    _selectionHighlightColor = [CPColor colorWithHexString:@"5990e3"];
 
     _tableColumnRanges = [];
     _dirtyTableColumnRangeIndex = 0;
@@ -345,7 +345,7 @@ var CPTableViewDefaultRowHeight = 23.0,
     _sourceListInactiveTopLineColor = [CPColor colorWithCalibratedRed:(173.0/255.0) green:(187.0/255.0) blue:(209.0/255.0) alpha:1.0];
     _sourceListInactiveBottomLineColor = [CPColor colorWithCalibratedRed:(150.0/255.0) green:(161.0/255.0) blue:(183.0/255.0) alpha:1.0];
 
-    var count = [_tableColumns count];
+    var count = NUMBER_OF_COLUMNS();
     
     if (count > 0)
     {
@@ -1485,131 +1485,263 @@ var CPTableViewDefaultRowHeight = 23.0,
 
     if (_disableAutomaticResizing)
         return;
-
+        
     var mask = _columnAutoResizingStyle;
-
-    if (mask === CPTableViewUniformColumnAutoresizingStyle)
-       [self _resizeAllColumnsUniformlyWithOldSize:aSize];
-    else if (mask === CPTableViewLastColumnOnlyAutoresizingStyle)
-        [self sizeLastColumnToFit];
-    else if (mask === CPTableViewFirstColumnOnlyAutoresizingStyle)
-        [self _autoResizeFirstColumn];
+    
+    switch (mask)
+    {
+        case CPTableViewUniformColumnAutoresizingStyle:
+            [self _autoresizeAllColumnsUniformlyWithOldSize:aSize];
+            break;
+            
+        case CPTableViewSequentialColumnAutoresizingStyle:
+            [self _autoresizeColumnsSequentiallyWithOldSize:aSize];
+            break;
+            
+        case CPTableViewReverseSequentialColumnAutoresizingStyle:
+            [self _autoresizeColumnsReverseSequentiallyWithOldSize:aSize];
+            break;        
+            
+        case CPTableViewLastColumnOnlyAutoresizingStyle:
+            [self _autoresizeColumn:CPTableViewResizeLastColumn oldSize:aSize];
+            break;
+            
+        case CPTableViewFirstColumnOnlyAutoresizingStyle:
+            [self _autoresizeColumn:CPTableViewResizeFirstColumn oldSize:aSize];
+            break;
+    }
 }
 
-- (void)_autoResizeFirstColumn
+- (int)_indexOfLastVisibleColumn
 {
-    var superview = [self superview];
+    for (var index = NUMBER_OF_COLUMNS() - 1; index >= 0; --index)
+    {
+        if (![_tableColumns[index] isHidden])
+            return index;
+    }
+        
+    return CPNotFound;
+}
 
+- (BOOL)_shouldAutoresize:(CGSize)oldSize
+{
+    /*
+        Autoresizing only occurs if:
+        
+        - We have a clip view
+        - The width changes
+        - The width is increasing and:
+            - The last visible column is not at maxWidth
+            - Its right edge was on or to the right of the clip view's old right edge
+            - Its right edge is to the left of the clip view's current right edge
+          OR
+        - The width is decreasing and:
+            - The last visible column is not at minWidth
+            - Its right edge was on or to the left of the clip view's old right edge
+            - Its right edge is to the right of the clip view's current right edge
+    */
+    
+    var superview = [self superview];
+    
     if (!superview)
-        return;
+        return NO;
+        
+    var bounds = [superview bounds],
+        delta = _CGRectGetWidth(bounds) - oldSize.width;
     
-    var superviewSize = [superview bounds].size;
+    if (delta == 0)
+        return NO;
+        
+    var lastColumnIndex = [self _indexOfLastVisibleColumn];
     
+    if (lastColumnIndex < 0)
+        return NO;
+        
     UPDATE_COLUMN_RANGES_IF_NECESSARY();
     
-    var count = NUMBER_OF_COLUMNS(),
-        visColumns = [[CPArray alloc] init],
-        totalWidth = 0,
-        i = 0;
+    var clipRightEdge = _CGRectGetMaxX(bounds),
+        columnRightEdge = _CGRectGetMaxX([self rectOfColumn:lastColumnIndex]),
+        lastColumn = [_tableColumns objectAtIndex:lastColumnIndex];
     
-    for (; i < count; i++)
+    if (delta > 0)
     {
-        if (![_tableColumns[i] isHidden])
-        {
-            [visColumns addObject:i];
-            totalWidth += [_tableColumns[i] width];
-        }
+        return (([lastColumn width] < [lastColumn maxWidth]) && 
+                (columnRightEdge >= clipRightEdge - delta)   &&
+                (columnRightEdge < clipRightEdge));
     }
-    
-    count = [visColumns count];
-    
-    //if there are rows
-    if (count > 0)
+    else // delta < 0
     {
-        var columnToResize = _tableColumns[visColumns[0]],
-            newWidth = superviewSize.width - totalWidth;// - [columnToResize width];
-            
-        newWidth += [columnToResize width];
-        newWidth = (newWidth < [columnToResize minWidth]) ? [columnToResize minWidth] : newWidth;
-        newWidth = (newWidth > [columnToResize maxWidth]) ? [columnToResize maxWidth] : newWidth;
-        
-        [columnToResize setWidth:FLOOR(newWidth)];
-     }
-
-     [self setNeedsLayout];
+        return (([lastColumn width] > [lastColumn minWidth]) && 
+                (columnRightEdge <= clipRightEdge - delta)   &&
+                (columnRightEdge > clipRightEdge));
+    }
 }
 
-- (void)_resizeAllColumnsUniformlyWithOldSize:(CGSize)oldSize
+- (int)_indexOfFirstResizableColumn
 {
-    var superview = [self superview];
+    var count = NUMBER_OF_COLUMNS(),
+        index = 0;
+    
+    for (; index < count; ++index)
+    {
+        var column = _tableColumns[index];
+        
+        if (![column isHidden] && ([column resizingMask] & CPTableColumnAutoresizingMask))
+            return index;
+    }
+    
+    return CPNotFound;
+}
 
-    if (!superview)
+- (int)_indexOfLastResizableColumn
+{
+    for (var index = NUMBER_OF_COLUMNS() - 1; index >= 0; --index)
+    {
+        var column = _tableColumns[index];
+        
+        if (![column isHidden] && ([column resizingMask] & CPTableColumnAutoresizingMask))
+            return index;
+    }
+    
+    return CPNotFound;
+}
+
+- (float)_totalVisibleColumnWidth
+{
+    var count = NUMBER_OF_COLUMNS(),
+        totalWidth = 0.0;
+    
+    for (var i = 0; i < count; ++i)
+    {
+        if (![_tableColumns[i] isHidden])
+            totalWidth += [_tableColumns[i] width] + _intercellSpacing.width;
+    }
+    
+    return totalWidth;
+}
+
+- (float)_constrainedWidthForColumn:(CPTableColumn)aColumn delta:(float)aDelta
+{
+    var width = [aColumn width] + aDelta;
+    width = MAX(width, [aColumn minWidth]);
+    width = MIN(width, [aColumn maxWidth]);
+    
+    return FLOOR(width);
+}
+
+- (void)_autoresizeAllColumnsUniformlyWithOldSize:(CGSize)oldSize
+{
+    if (![self _shouldAutoresize:oldSize])
         return;
 
-    var superviewSize = [superview bounds].size;
-
-    if (_dirtyTableColumnRangeIndex !== CPNotFound)
-        [self _recalculateTableColumnRanges];//UPDATE_COLUMN_RANGES_IF_NECESSARY();
-
-    var count = _tableColumns.length,//NUMBER_OF_COLUMNS(),
-        visColumns = [[CPArray alloc] init],
-        buffer = 0.0;
-
-    // Fixme: cache resizable columns because they won't changes betwwen two calls to this method.
-    for (var i = 0; i < count; i++)
+    /*
+        After careful analysis, the algorithm Cocoa uses is:
+        
+        1. Calculate the width delta between the current total visible column width and the new superview width.
+           Note that we *cannot* rely on the delta from oldSize.width, because that delta does not guarantee
+           that the columns will fit the new width.
+        
+        2. Get all of the columns that are autoresizable and whose width > minWidth if delta < 0 or whose
+           width < maxWidth if delta > 0.
+                   
+        3. Iterate over the columns to resize, left to right if delta > 0, right to left if delta < 0.
+        
+        4. Divide the remaining delta by the number of columns left to resize and ceiling towards +/- infinity.
+        
+        5. Resize the current column, constraining to minWidth/maxWidth. Subtract the actual change in width
+           from the delta.
+           
+        6. Go to step 4 and repeat with the next column in the iteration.
+    */
+    
+    var totalWidth = [self _totalVisibleColumnWidth],
+        delta = _CGRectGetWidth([[self superview] bounds]) - totalWidth,
+        count = NUMBER_OF_COLUMNS(),
+        columnsToResize = [CPArray array],
+        i;
+        
+    for (i = 0; i < count; ++i)
     {
         var tableColumn = _tableColumns[i];
-        
+    
         if (![tableColumn isHidden] && ([tableColumn resizingMask] & CPTableColumnAutoresizingMask))
-            [visColumns addObject:i];
+        {
+            if ((delta > 0 && [tableColumn width] < [tableColumn maxWidth]) ||
+                (delta < 0 && [tableColumn width] > [tableColumn minWidth]))
+            {
+                [columnsToResize addObject:tableColumn];
+            }
+        }
     }
-
-    // redefine count
-    count = [visColumns count];
-
-    //if there are columns
-    if (count > 0)
+    
+    count = [columnsToResize count];
+    
+    if (count === 0)
+        return;
+        
+    var first = delta > 0 ? 0 : count - 1,
+        last = delta > 0 ? count : -1,
+        increment = delta > 0 ? 1 : -1;
+        
+    for (i = first; i !== last; i += increment, --count)
     {
-        var maxXofColumns = _CGRectGetMaxX([self rectOfColumn:visColumns[count - 1]]);
-
-        // If the x value of the end of the last column is between the current bounds and the previous bounds we should snap.
-        if (!_lastColumnShouldSnap && (maxXofColumns >= superviewSize.width && maxXofColumns <= oldSize.width || maxXofColumns <= superviewSize.width && maxXofColumns >= oldSize.width))
-        {
-            //set the snap mask
-            _lastColumnShouldSnap = YES;
-            //then we need to make sure everything is set correctly.
-            [self _resizeAllColumnsUniformlyWithOldSize:CGSizeMake(maxXofColumns, 0)];
-        }
-
-        if (!_lastColumnShouldSnap)
-            return;
-
-
-        // FIX ME: This is wrong because this should continue to resize all columns
-        // If the last column reaches it's max/min it will simply stop resizing,
-        // correct behavior is to resize all columns until they reach their min/max
-
-        for (var i = 0; i < count; i++)
-        {
-            var column = visColumns[i];
-                columnToResize = _tableColumns[column],
-                currentBuffer = buffer / (count - i),
-                realNewWidth = ([columnToResize width] / oldSize.width * [superview bounds].size.width) + currentBuffer ,
-                newWidth = MAX([columnToResize minWidth], realNewWidth);
-                newWidth = MIN([columnToResize maxWidth], realNewWidth);
-                
-            buffer -= currentBuffer;
-
-            // the buffer takes into account the min/max width of the column
-            buffer += realNewWidth - newWidth;
-
-            [columnToResize setWidth:newWidth];
-        }
-
-        // if there is space left over that means column resize was too long or too short
-        if (buffer !== 0)
-            _lastColumnShouldSnap = NO;
+        var tableColumn = columnsToResize[i],
+            columnDelta = delta / count,
+            columnDelta = delta > 0 ? Math.ceil(columnDelta) : Math.floor(columnDelta);
+            
+        if (columnDelta == 0)
+            break;
+            
+        var newWidth = [self _constrainedWidthForColumn:tableColumn delta:columnDelta];
+            
+        delta -= newWidth - [tableColumn width];
+        
+        [tableColumn setWidth:newWidth];
     }
+    
+    [self setNeedsLayout];
+}
+
+- (void)_autoresizeColumnsSequentiallyWithOldSize:(CGSize)oldSize
+{
+    if (![self _shouldAutoresize:oldSize])
+        return;
+        
+    var delta = _CGRectGetWidth([[self superview] bounds]) - oldSize.width,
+        columnIndex = delta > 0 ? [self _indexOfFirstResizableColumn] : [self _indexOfLastResizableColumn];
+}
+
+- (void)_autoresizeColumn:(CPTableViewResizeType)whichColumn oldSize:(CGSize)oldSize
+{
+    if (oldSize && ![self _shouldAutoresize:oldSize])
+        return;
+        
+    var indexOfColumnToResize;
+    
+    switch (whichColumn)
+    {
+        case CPTableViewResizeFirstColumn:
+            indexOfColumnToResize = [self _indexOfFirstResizableColumn];
+            break;
+            
+        case CPTableViewResizeLastColumn:
+            indexOfColumnToResize = [self _indexOfLastResizableColumn];
+            break;
+            
+        case CPTableViewResizeLastVisibleColumn:
+            indexOfColumnToResize = [self _indexOfLastVisibleColumn];
+            break;
+    }
+        
+    if (indexOfColumnToResize === CPNotFound)
+        return;
+    
+    var superviewWidth = _CGRectGetWidth([[self superview] bounds]),
+        column = _tableColumns[indexOfColumnToResize],
+        totalWidth = [self _totalVisibleColumnWidth],
+        newWidth = [self _constrainedWidthForColumn:column delta:superviewWidth - totalWidth];
+        
+    [column setWidth:newWidth];
 
     [self setNeedsLayout];
 }
@@ -1636,42 +1768,7 @@ var CPTableViewDefaultRowHeight = 23.0,
 */
 - (void)sizeLastColumnToFit
 {
-    var superview = [self superview];
-
-    if (!superview)
-        return;
-
-    UPDATE_COLUMN_RANGES_IF_NECESSARY();
-    
-    var superviewSize = [superview bounds].size,
-        index = NUMBER_OF_COLUMNS() - 1;
-
-    // decrement the counter until we get to the last row that's not hidden
-    for (; index >= 0 && [_tableColumns[index] isHidden]; --index)
-        ;
-
-    // if the last row exists
-    if (index >= 0)
-    {
-        var columnToResize = _tableColumns[index],
-            newWidth = MAX(0.0, (superviewSize.width - _CGRectGetMinX([self rectOfColumn:index])) - _intercellSpacing.width),
-            didResize = NO;
-
-        if (newWidth > 0)
-        {
-            newWidth = MAX([columnToResize minWidth], newWidth);
-            newWidth = MIN([columnToResize maxWidth], newWidth);
-            
-            if (newWidth != [columnToResize width])
-            {
-                [columnToResize setWidth:newWidth];
-                didResize = YES;
-            }
-        }
-        
-        if (didResize)
-            [self setNeedsLayout];
-    }
+    [self _autoresizeColumn:CPTableViewResizeLastVisibleColumn oldSize:nil];
 }
 
 - (void)noteNumberOfRowsChanged
@@ -2279,16 +2376,6 @@ var CPTableViewDefaultRowHeight = 23.0,
     return objectValue;
 }
 
-- (CGRect)_exposedRect
-{
-    var superview = [self superview];
-
-    if (![superview isKindOfClass:[CPClipView class]])
-        return [self bounds];
-
-    return [self convertRect:CGRectIntersection([superview bounds], [self frame]) fromView:superview];
-}
-
 - (void)load
 {
     if (_reloadAllRows)
@@ -2546,7 +2633,7 @@ var CPTableViewDefaultRowHeight = 23.0,
         [_headerView setFrameSize:_CGSizeMake(_CGRectGetWidth([self frame]), _CGRectGetHeight([_headerView frame]))];
 }
 
-- (CGRect)exposedClipRect
+- (CGRect)_exposedRect
 {
     var superview = [self superview];
 
@@ -2555,6 +2642,7 @@ var CPTableViewDefaultRowHeight = 23.0,
 
     return [self convertRect:CGRectIntersection([superview bounds], [self frame]) fromView:superview];
 }
+
 
 - (void)_drawRect:(CGRect)aRect
 {
@@ -3232,7 +3320,7 @@ var CPTableViewDefaultRowHeight = 23.0,
         dropOperation = [dropInfo objectForKey:@"operation"],
         numberOfRows = [self numberOfRows];
         dragOperation = [self _validateDrop:sender proposedRow:row proposedDropOperation:dropOperation];
-        exposedClipRect = [self exposedClipRect];
+        _exposedRect = [self _exposedRect];
 
     [_dropOperationFeedbackView setHidden:(dragOperation == CPDragOperationNone)];
     
@@ -3245,7 +3333,7 @@ var CPTableViewDefaultRowHeight = 23.0,
     var rect = _CGRectMakeZero();
 
     if (row === -1)
-        rect = exposedClipRect;
+        rect = _exposedRect;
     else if (dropOperation === CPTableViewDropAbove)
         rect = [self _rectForDropHighlightViewBetweenUpperRow:row - 1 andLowerRow:row offset:location];
     else
@@ -3436,7 +3524,7 @@ var CPTableViewDefaultRowHeight = 23.0,
 
         var i = [[self selectedRowIndexes] lastIndex];
         
-        if (i<[self numberOfRows] - 1)
+        if (i < [self numberOfRows] - 1)
             i++; //set index to the next row after the last row selected
     }
     else
@@ -3451,7 +3539,7 @@ var CPTableViewDefaultRowHeight = 23.0,
 
     if (_implementedDelegateMethods & CPTableViewDelegate_tableView_shouldSelectRow_)
     {
-        while ((![_delegate tableView:self shouldSelectRow:i]) && i<[self numberOfRows])
+        while ((![_delegate tableView:self shouldSelectRow:i]) && i < [self numberOfRows])
         {
             //check to see if the row can be selected if it can't be then see if the next row can be selected
             i++;
