@@ -68,7 +68,9 @@ var CPTableViewDelegate_selectionShouldChangeInTableView_                       
 
 var CPTableViewResizeFirstColumn = 1,
     CPTableViewResizeLastColumn = 2,
-    CPTableViewResizeLastVisibleColumn = 3;
+    CPTableViewResizeLastVisibleColumn = 3,
+    CPTableViewResizeFirstAvailableColumn = 4,
+    CPTableViewResizeLastAvailableColumn = 5;
     
 //CPTableViewDraggingDestinationFeedbackStyles
 CPTableViewDraggingDestinationFeedbackStyleNone = -1;
@@ -207,7 +209,9 @@ var CPTableViewDefaultRowHeight = 23.0,
     _CPTableDrawView _tableDrawView;
 
     SEL         _doubleAction;
+    
     CPInteger   _clickedRow;
+    CPInteger   _clickedColumn;
     unsigned    _columnAutoResizingStyle;
 
     int         _lastTrackedRowIndex;
@@ -250,6 +254,7 @@ var CPTableViewDefaultRowHeight = 23.0,
         _allowsMultipleSelection = NO;
         _allowsEmptySelection = YES;
         _allowsColumnSelection = NO;
+        _disableAutomaticResizing = NO;
 
         // Setting Display Attributes
         _selectionHighlightStyle = CPTableViewSelectionHighlightStyleRegular;
@@ -478,8 +483,12 @@ var CPTableViewDefaultRowHeight = 23.0,
 }
 
 /*
-    * - clickedColumn
+    Returns the index of the the column the user clicked to trigger an action, or -1 if no column was clicked.
 */
+- (CPInteger)clickedColumn
+{
+    return _clickedColumn;
+}
 
 /*!
     Returns the index of the the row the user clicked to trigger an action, or -1 if no row was clicked.
@@ -840,6 +849,12 @@ var CPTableViewDefaultRowHeight = 23.0,
         columnIndexes = [CPIndexSet indexSetWithIndexesInRange:CPMakeRange(fromIndex, toIndex)];
 
     [self reloadDataForRowIndexes:rowIndexes columnIndexes:columnIndexes];
+    
+    var info = [CPDictionary dictionaryWithJSObject:{CPOldColumn:fromIndex, CPNewColumn:toIndex}];
+    
+    [[CPNotificationCenter defaultCenter] postNotificationName:CPTableViewColumnDidMoveNotification
+                                                        object:self
+                                                      userInfo:info];
 }
 
 /*!
@@ -1132,18 +1147,56 @@ var CPTableViewDefaultRowHeight = 23.0,
 {
     return [_selectedRowIndexes containsIndex:aRow];
 }
+
 /*
-- (void)selectAll:
-    * - deselectAll:
     * - allowsTypeSelect
     * - setAllowsTypeSelect:
 */
 
 /*!
+    Selects all rows
+*/
+- (void)selectAll:(id)sender
+{
+    if (!_allowsMultipleSelection)
+        return;
+    
+    if ((_implementedDelegateMethods & CPTableViewDelegate_selectionShouldChangeInTableView_) &&
+        ![_delegate selectionShouldChangeInTableView:self])
+    {
+        return;
+    }
+    
+    // Cocoa docs say that if columns were most recently selected, select all columns.
+    // Otherwise select all rows.
+    var rowIndexes, columnIndexes;
+    
+    if ([_selectedColumnIndexes count])
+    {
+        rowIndexes = [CPIndexSet indexSet];
+        columnIndexes = [CPIndexSet indexSetWithIndexesInRange:CPMakeRange(0, NUMBER_OF_COLUMNS())];
+    }
+    else
+    {
+        rowIndexes = [CPIndexSet indexSetWithIndexesInRange:CPMakeRange(0, [self numberOfRows])];
+        columnIndexes = [CPIndexSet indexSet];
+    }
+        
+    [self selectRowIndexes:rowIndexes byExtendingSelection:NO];
+    [self selectColumnIndexes:columnIndexes byExtendingSelection:NO];
+}
+
+/*!
     Deselects all rows
 */
-- (void)deselectAll
+- (void)deselectAll:(id)sender
 {
+    if ((_implementedDelegateMethods & CPTableViewDelegate_selectionShouldChangeInTableView_) &&
+        ![_delegate selectionShouldChangeInTableView:self])
+    {
+        return;
+    }
+        
     [self selectRowIndexes:[CPIndexSet indexSet] byExtendingSelection:NO];
     [self selectColumnIndexes:[CPIndexSet indexSet] byExtendingSelection:NO];
 }
@@ -1334,7 +1387,6 @@ var CPTableViewDefaultRowHeight = 23.0,
 
 - (CGRect)rectOfRow:(CPInteger)aRowIndex
 {
-    // FIXME: WRONG: ASK TABLE COLUMN RANGE
     var height = _rowHeight + _intercellSpacing.height;
     
     return _CGRectMake(0.0, aRowIndex * height, _CGRectGetWidth([self bounds]), height);
@@ -1394,7 +1446,6 @@ var CPTableViewDefaultRowHeight = 23.0,
     if (_numberOfHiddenColumns <= 0)
         return [CPIndexSet indexSetWithIndexesInRange:CPMakeRange(column, lastColumn - column + 1)];
 
-    //
     var indexSet = [CPIndexSet indexSet];
 
     for (; column <= lastColumn; ++column)
@@ -1409,7 +1460,7 @@ var CPTableViewDefaultRowHeight = 23.0,
 }
 
 // Complexity:
-// O(lg Columns) if table view contains now hidden columns
+// O(lg Columns) if table view contains no hidden columns
 // O(Columns) if table view contains hidden columns
 - (CPInteger)columnAtPoint:(CGPoint)aPoint
 {
@@ -1523,13 +1574,11 @@ var CPTableViewDefaultRowHeight = 23.0,
     return CPNotFound;
 }
 
-- (BOOL)_shouldAutoresize:(CGSize)oldSize
+- (BOOL)_shouldAutoresize
 {
     /*
         Autoresizing only occurs if:
         
-        - We have a clip view
-        - The width changes
         - The width is increasing and:
             - The last visible column is not at maxWidth
             - Its right edge was on or to the right of the clip view's old right edge
@@ -1541,13 +1590,8 @@ var CPTableViewDefaultRowHeight = 23.0,
             - Its right edge is to the right of the clip view's current right edge
     */
     
-    var superview = [self superview];
-    
-    if (!superview)
-        return NO;
-        
-    var bounds = [superview bounds],
-        delta = _CGRectGetWidth(bounds) - oldSize.width;
+    var clipBounds = [[self superview] bounds],
+        delta = _CGRectGetWidth(clipBounds) - _CGRectGetWidth([self bounds]);
     
     if (delta == 0)
         return NO;
@@ -1559,7 +1603,7 @@ var CPTableViewDefaultRowHeight = 23.0,
         
     UPDATE_COLUMN_RANGES_IF_NECESSARY();
     
-    var clipRightEdge = _CGRectGetMaxX(bounds),
+    var clipRightEdge = _CGRectGetMaxX(clipBounds),
         columnRightEdge = _CGRectGetMaxX([self rectOfColumn:lastColumnIndex]),
         lastColumn = [_tableColumns objectAtIndex:lastColumnIndex];
     
@@ -1577,12 +1621,24 @@ var CPTableViewDefaultRowHeight = 23.0,
     }
 }
 
-- (int)_indexOfFirstResizableColumn
+- (int)_indexOfResizableColumnInDirection:(int)direction
 {
-    var count = NUMBER_OF_COLUMNS(),
-        index = 0;
+    var first, last, increment;
     
-    for (; index < count; ++index)
+    if (direction > 0)
+    {
+        first = 0;
+        last = NUMBER_OF_COLUMNS();
+        increment = 1;
+    }
+    else
+    {
+        first = NUMBER_OF_COLUMNS() - 1;
+        last = -1;
+        increment = -1;
+    }
+    
+    for (var index = first; index != last; index += increment)
     {
         var column = _tableColumns[index];
         
@@ -1591,36 +1647,78 @@ var CPTableViewDefaultRowHeight = 23.0,
     }
     
     return CPNotFound;
+}
+
+- (int)_indexOfFirstResizableColumn
+{
+    return [self _indexOfResizableColumnInDirection:1];
 }
 
 - (int)_indexOfLastResizableColumn
 {
-    for (var index = NUMBER_OF_COLUMNS() - 1; index >= 0; --index)
+    return [self _indexOfResizableColumnInDirection:-1];
+}
+
+- (int)_indexOfResizableColumnWithProposedDelta:(float)proposedDelta inDirection:(int)direction
+{
+    var first, last, increment;
+    
+    if (direction > 0)
+    {
+        first = 0;
+        last = NUMBER_OF_COLUMNS();
+        increment = 1;
+    }
+    else
+    {
+        first = NUMBER_OF_COLUMNS() - 1;
+        last = -1;
+        increment = -1;
+    }
+    
+    for (var index = first; index != last; index += increment)
     {
         var column = _tableColumns[index];
         
         if (![column isHidden] && ([column resizingMask] & CPTableColumnAutoresizingMask))
-            return index;
+        {
+            var proposedWidth = [column width] + proposedDelta;
+            
+            if (proposedDelta > 0)
+            {
+                if (proposedWidth <= [column maxWidth])
+                    return index;
+            }
+            else
+            {
+                if (proposedWidth >= [column minWidth])
+                    return index;
+            }
+        }
     }
     
     return CPNotFound;
 }
 
-- (float)_totalVisibleColumnWidth
+- (int)_indexOfFirstResizableColumnWithProposedDelta:(float)proposedDelta
 {
-    var count = NUMBER_OF_COLUMNS(),
-        totalWidth = 0.0;
-    
-    for (var i = 0; i < count; ++i)
-    {
-        if (![_tableColumns[i] isHidden])
-            totalWidth += [_tableColumns[i] width] + _intercellSpacing.width;
-    }
-    
-    return totalWidth;
+    return [self _indexOfResizableColumnWithProposedDelta:proposedDelta inDirection:1];
 }
 
-- (float)_constrainedWidthForColumn:(CPTableColumn)aColumn delta:(float)aDelta
+- (int)_indexOfLastResizableColumnWithProposedDelta:(float)proposedDelta
+{
+    return [self _indexOfResizableColumnWithProposedDelta:proposedDelta inDirection:-1];
+}
+
+- (float)_totalVisibleColumnWidth
+{
+    var index = [self _indexOfLastVisibleColumn],
+        rect = [self rectOfColumn:index];
+    
+    return _CGRectGetMaxX(rect);
+}
+
+- (float)_constrainedWidthForTableColumn:(CPTableColumn)aColumn delta:(float)aDelta
 {
     var width = [aColumn width] + aDelta;
     width = MAX(width, [aColumn minWidth]);
@@ -1629,9 +1727,17 @@ var CPTableViewDefaultRowHeight = 23.0,
     return FLOOR(width);
 }
 
+- (float)_visibleColumnDeltaToSuperview
+{
+    var superviewWidth = _CGRectGetWidth([[self superview] bounds]),
+        totalWidth = [self _totalVisibleColumnWidth];
+    
+    return superviewWidth - totalWidth;
+}
+
 - (void)_autoresizeAllColumnsUniformlyWithOldSize:(CGSize)oldSize
 {
-    if (![self _shouldAutoresize:oldSize])
+    if (![self _shouldAutoresize])
         return;
 
     /*
@@ -1654,8 +1760,7 @@ var CPTableViewDefaultRowHeight = 23.0,
         6. Go to step 4 and repeat with the next column in the iteration.
     */
     
-    var totalWidth = [self _totalVisibleColumnWidth],
-        delta = _CGRectGetWidth([[self superview] bounds]) - totalWidth,
+    var delta = [self _visibleColumnDeltaToSuperview],
         count = NUMBER_OF_COLUMNS(),
         columnsToResize = [CPArray array],
         i;
@@ -1692,7 +1797,7 @@ var CPTableViewDefaultRowHeight = 23.0,
         if (columnDelta == 0)
             break;
             
-        var newWidth = [self _constrainedWidthForColumn:tableColumn delta:columnDelta];
+        var newWidth = [self _constrainedWidthForTableColumn:tableColumn delta:columnDelta];
             
         delta -= newWidth - [tableColumn width];
         
@@ -1704,19 +1809,31 @@ var CPTableViewDefaultRowHeight = 23.0,
 
 - (void)_autoresizeColumnsSequentiallyWithOldSize:(CGSize)oldSize
 {
-    if (![self _shouldAutoresize:oldSize])
-        return;
-        
-    var delta = _CGRectGetWidth([[self superview] bounds]) - oldSize.width,
-        columnIndex = delta > 0 ? [self _indexOfFirstResizableColumn] : [self _indexOfLastResizableColumn];
+    var delta = [self _visibleColumnDeltaToSuperview];
+    
+    if (delta > 0)
+        [self _autoresizeColumn:CPTableViewResizeFirstAvailableColumn oldSize:oldSize];
+    else
+        [self _autoresizeColumn:CPTableViewResizeLastAvailableColumn oldSize:oldSize];
+}
+
+- (void)_autoresizeColumnsReverseSequentiallyWithOldSize:(CGSize)oldSize
+{
+    var delta = [self _visibleColumnDeltaToSuperview];
+    
+    if (delta < 0)
+        [self _autoresizeColumn:CPTableViewResizeFirstAvailableColumn oldSize:oldSize];
+    else
+        [self _autoresizeColumn:CPTableViewResizeLastAvailableColumn oldSize:oldSize];
 }
 
 - (void)_autoresizeColumn:(CPTableViewResizeType)whichColumn oldSize:(CGSize)oldSize
 {
-    if (oldSize && ![self _shouldAutoresize:oldSize])
+    if (oldSize && ![self _shouldAutoresize])
         return;
         
-    var indexOfColumnToResize;
+    var indexOfColumnToResize,
+        delta = [self _visibleColumnDeltaToSuperview];
     
     switch (whichColumn)
     {
@@ -1731,15 +1848,21 @@ var CPTableViewDefaultRowHeight = 23.0,
         case CPTableViewResizeLastVisibleColumn:
             indexOfColumnToResize = [self _indexOfLastVisibleColumn];
             break;
+            
+        case CPTableViewResizeFirstAvailableColumn:
+            indexOfColumnToResize = [self _indexOfFirstResizableColumnWithProposedDelta:delta];
+            break;
+            
+        case CPTableViewResizeLastAvailableColumn:
+            indexOfColumnToResize = [self _indexOfLastResizableColumnWithProposedDelta:delta];
+            break;
     }
         
     if (indexOfColumnToResize === CPNotFound)
         return;
     
-    var superviewWidth = _CGRectGetWidth([[self superview] bounds]),
-        column = _tableColumns[indexOfColumnToResize],
-        totalWidth = [self _totalVisibleColumnWidth],
-        newWidth = [self _constrainedWidthForColumn:column delta:superviewWidth - totalWidth];
+    var column = _tableColumns[indexOfColumnToResize],
+        newWidth = [self _constrainedWidthForTableColumn:column delta:delta];
         
     [column setWidth:newWidth];
 
@@ -2087,6 +2210,11 @@ var CPTableViewDefaultRowHeight = 23.0,
         [[aTableColumn headerView] _setIndicatorImage:anImage];
 }
 
+- (void)indicatorImageInTableColumn:(CPTableColumn)aTableColumn
+{
+    return [[aTableColumn headerView] _indicatorImage];
+}
+
 + (CPImage)_defaultTableHeaderSortImage
 {
     return CPAppKitImage("tableview-headerview-ascending.png", CGSizeMake(9.0, 8.0));
@@ -2155,13 +2283,7 @@ var CPTableViewDefaultRowHeight = 23.0,
 
         while (row !== CPNotFound)
         {
-            var dataView = [self _newDataViewForRow:row tableColumn:tableColumn];
-
-            [dataView setFrame:[self frameOfDataViewAtColumn:columnIndex row:row]];
-            [dataView setObjectValue:[self _objectValueForTableColumn:tableColumn row:row]];
-
-            // If the column uses content bindings, allow them to override the objectValueForTableColumn.
-            [tableColumn prepareDataView:dataView forRow:row];
+            var dataView = [self preparedDataViewAtColumn:columnIndex row:row];
 
             [view addSubview:dataView];
 
@@ -2219,16 +2341,14 @@ var CPTableViewDefaultRowHeight = 23.0,
     
     while (row !== CPNotFound)
     {
-        var dataView = [self _newDataViewForRow:row tableColumn:tableColumn],
-            dataViewFrame = [self frameOfDataViewAtColumn:theColumnIndex row:row];
+        var dataView = [self preparedDataViewAtColumn:theColumnIndex row:row],
+            dataViewFrame = [dataView frame];
 
         dataViewFrame.origin.x = xOffset;
 
         // Offset by table header height - scroll position
         dataViewFrame.origin.y -= _CGRectGetMinY(exposedRect);
         [dataView setFrame:dataViewFrame];
-
-        [dataView setObjectValue:[self _objectValueForTableColumn:tableColumn row:row]];
 
         if (_draggedColumnIsSelected || [self isRowSelected:row])
             [dataView setThemeState:CPThemeStateSelectedDataView];
@@ -2508,25 +2628,14 @@ var CPTableViewDefaultRowHeight = 23.0,
         for (; rowIndex < rowsCount; ++rowIndex)
         {
             var row = rowArray[rowIndex],
-                dataView = [self _newDataViewForRow:row tableColumn:tableColumn],
+                dataView = [self preparedDataViewAtColumn:columnIndex row:row],
                 isButton = [dataView isKindOfClass:[CPButton class]],
                 isTextField = [dataView isKindOfClass:[CPTextField class]];
-
-            [dataView setFrame:[self frameOfDataViewAtColumn:column row:row]];
-            [dataView setObjectValue:[self _objectValueForTableColumn:tableColumn row:row]];
-
-            // This gives the table column an opportunity to apply the bindings.
-            // It will override the value set in the data source, if there is a data source.
-            // It will do nothing if there is no value binding set.
-            [tableColumn prepareDataView:dataView forRow:row];
 
             if (columnIsSelected || [self isRowSelected:row])
                 [dataView setThemeState:CPThemeStateSelectedDataView];
             else
                 [dataView unsetThemeState:CPThemeStateSelectedDataView];
-
-            if (_implementedDelegateMethods & CPTableViewDelegate_tableView_willDisplayView_forTableColumn_row_)
-                [_delegate tableView:self willDisplayView:dataView forTableColumn:tableColumn row:row];
 
             if ([dataView superview] !== self)
                 [self addSubview:dataView];
@@ -2600,15 +2709,28 @@ var CPTableViewDefaultRowHeight = 23.0,
         [sender setEditable:NO];
 }
 
-- (CPView)_newDataViewForRow:(CPInteger)aRow tableColumn:(CPTableColumn)aTableColumn
+- (CPView)preparedDataViewAtColumn:(CPInteger)column row:(CPInteger)row
 {
+    var tableColumn = _tableColumns[column];
+    
     if ((_implementedDelegateMethods & CPTableViewDelegate_tableView_dataViewForTableColumn_row_))
     {
-        var dataView = [_delegate tableView:self dataViewForTableColumn:aTableColumn row:aRow];
-        [aTableColumn setDataView:dataView];
+        var delegateDataView = [_delegate tableView:self dataViewForTableColumn:tableColumn row:row];
+        [aTableColumn setDataView:delegateDataView];
     }
     
-    return [aTableColumn _newDataViewForRow:aRow];
+    var dataView = [tableColumn _newDataViewForRow:row];
+    
+    [dataView setFrame:[self frameOfDataViewAtColumn:column row:row]];
+    [dataView setObjectValue:[self _objectValueForTableColumn:tableColumn row:row]];
+
+    // If the column uses content bindings, allow them to override the objectValueForTableColumn.
+    [tableColumn prepareDataView:dataView forRow:row];
+
+    if (_implementedDelegateMethods & CPTableViewDelegate_tableView_willDisplayView_forTableColumn_row_)
+        [_delegate tableView:self willDisplayView:dataView forTableColumn:tableColumn row:row];
+        
+    return dataView;
 }
 
 - (void)_enqueueReusableDataView:(CPView)aDataView
@@ -3174,13 +3296,19 @@ var CPTableViewDefaultRowHeight = 23.0,
             }
         }
 
-    } //end of editing conditional
+    } // end of editing conditional
 
-    //double click actions
-    if ([[CPApp currentEvent] clickCount] === 2 && _doubleAction)
+    var clickCount = [[CPApp currentEvent] clickCount];
+    
+    if ((clickCount === 1 && [self action]) || (clickCount === 2 && _doubleAction))
     {
         _clickedRow = [self rowAtPoint:aPoint];
-        [self sendAction:_doubleAction to:_target];
+        _clickedColumn = [self columnAtPoint:aPoint];
+        
+        if (clickCount === 1)
+            [self sendAction:[self action] to:_target];
+        else
+            [self sendAction:_doubleAction to:_target];
     }
 }
 
