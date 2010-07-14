@@ -1525,10 +1525,12 @@ var CPTableViewDefaultRowHeight = 23.0,
     UPDATE_COLUMN_RANGES_IF_NECESSARY();
 
     var tableColumnRange = _tableColumnRanges[aColumn],
-        rectOfRow = [self rectOfRow:aRow];
+        rectOfRow = [self rectOfRow:aRow],
+        leftInset = FLOOR(_intercellSpacing.width / 2.0),
+        topInset = FLOOR(_intercellSpacing.height / 2.0);
     
-    return _CGRectMake(tableColumnRange.location, 
-                       _CGRectGetMinY(rectOfRow), 
+    return _CGRectMake(tableColumnRange.location + leftInset, 
+                       _CGRectGetMinY(rectOfRow) + topInset, 
                        tableColumnRange.length - _intercellSpacing.width, 
                        _CGRectGetHeight(rectOfRow) - _intercellSpacing.height);
 }
