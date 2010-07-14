@@ -2332,7 +2332,8 @@ var CPTableViewDefaultRowHeight = 23.0,
     // Now a view that clips the column data views, which itself is clipped to the content view
     var visibleRect = CGRectIntersection(columnRect, exposedRect);
     
-    frame = _CGRectMake(0.0, _CGRectGetHeight(headerFrame), _CGRectGetWidth(visibleRect), _CGRectGetHeight(exposedRect)),
+    frame = _CGRectMake(0.0, _CGRectGetHeight(headerFrame), _CGRectGetWidth(visibleRect), _CGRectGetHeight(exposedRect));
+    
     var columnClipView = [[CPView alloc] initWithFrame:frame];
     
     [dragView addSubview:columnClipView];
