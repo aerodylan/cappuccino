@@ -234,6 +234,7 @@ var CPTableViewDefaultRowHeight = 23.0,
 
     int         _draggedColumnIndex;
     BOOL        _draggedColumnIsSelected;
+    CPArray     _differedColumnDataToRemove;
 
 /*
     CPGradient  _sourceListInactiveGradient;
@@ -764,6 +765,7 @@ var CPTableViewDefaultRowHeight = 23.0,
     else
         _dirtyTableColumnRangeIndex = MIN(NUMBER_OF_COLUMNS() - 1, _dirtyTableColumnRangeIndex);
 
+    [self tile];
     [self setNeedsLayout];
 }
 
@@ -781,8 +783,11 @@ var CPTableViewDefaultRowHeight = 23.0,
     if (index === CPNotFound)
         return;
 
+    // we differ the actual removal until the end of the runloop in order to keep a reference to the column.
+    [_differedColumnDataToRemove addObject:{"column":aTableColumn, "shouldBeHidden": [aTableColumn isHidden]}];
+
+    [aTableColumn setHidden:YES];
     [aTableColumn setTableView:nil];
-    [_tableColumns removeObjectAtIndex:index];
 
     var tableColumnUID = [aTableColumn UID];
 
@@ -931,7 +936,7 @@ var CPTableViewDefaultRowHeight = 23.0,
         _selectedColumnIndexes = [columns copy];
 
     [self _updateHighlightWithOldColumns:previousSelectedIndexes newColumns:_selectedColumnIndexes];
-    [_tableDrawView display]; // FIXME: should be setNeedsDisplayInRect:enclosing rect of new (de)selected columns
+    [self setNeedsDisplay:YES]; // FIXME: should be setNeedsDisplayInRect:enclosing rect of new (de)selected columns
                               // but currently -drawRect: is not implemented here
     [_headerView setNeedsDisplay:YES];
 
@@ -946,7 +951,7 @@ var CPTableViewDefaultRowHeight = 23.0,
     _selectedRowIndexes = [rows copy];
 
     [self _updateHighlightWithOldRows:previousSelectedIndexes newRows:_selectedRowIndexes];
-    [_tableDrawView display]; // FIXME: should be setNeedsDisplayInRect:enclosing rect of new (de)selected rows
+    [self setNeedsDisplay:YES]; // FIXME: should be setNeedsDisplayInRect:enclosing rect of new (de)selected rows
                               // but currently -drawRect: is not implemented here
 
     [[CPKeyValueBinding getBinding:@"selectionIndexes" forObject:self] reverseSetValueFor:@"selectedRowIndexes"];
@@ -2542,7 +2547,7 @@ var CPTableViewDefaultRowHeight = 23.0,
 
     [_tableDrawView setFrame:exposedRect];
 
-    [_tableDrawView display];
+    [self setNeedsDisplay:YES];
 
     // Now clear all the leftovers
     // FIXME: this could be faster!
@@ -2553,6 +2558,20 @@ var CPTableViewDefaultRowHeight = 23.0,
 
         while (count--)
             [dataViews[count] removeFromSuperview];
+    }
+
+    // if we have any columns to remove do that here
+    if ([_differedColumnDataToRemove count])
+    {
+        for (var i = 0; i < _differedColumnDataToRemove.length; i++)
+        {
+            var data = _differedColumnDataToRemove[i],
+                column = data.column;
+
+            [column setHidden:data.shouldBeHidden];
+            [_tableColumns removeObject:column];
+        }
+        [_differedColumnDataToRemove removeAllObjects];
     }
 }
 
@@ -2765,6 +2784,11 @@ var CPTableViewDefaultRowHeight = 23.0,
     return [self convertRect:CGRectIntersection([superview bounds], [self frame]) fromView:superview];
 }
 
+- (void)setNeedsDisplay:(BOOL)aFlag
+{
+    [super setNeedsDisplay:aFlag];
+    [_tableDrawView setNeedsDisplay:aFlag];
+}
 
 - (void)_drawRect:(CGRect)aRect
 {

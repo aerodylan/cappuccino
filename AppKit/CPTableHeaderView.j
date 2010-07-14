@@ -368,6 +368,7 @@ var CPTableHeaderViewResizeZone = 3.0,
             [_tableView _didClickTableColumn:_activeColumn modifierFlags:[theEvent modifierFlags]];
     }
 
+    [self _setPressedColumn:-1];
     [self _updateResizeCursor:[CPApp currentEvent]];
 
     _activeColumn = -1;
@@ -528,7 +529,6 @@ var CPTableHeaderViewResizeZone = 3.0,
 
     [_columnDragClipView removeFromSuperview];
     [_tableView _setDraggedColumn:-1];
-    [self _setPressedColumn:-1];
 
     var headerView = [[[_tableView tableColumns] objectAtIndex:aColumnIndex] headerView];
     
