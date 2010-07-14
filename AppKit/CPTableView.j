@@ -1577,27 +1577,25 @@ var CPTableViewDefaultRowHeight = 23.0,
     return CPNotFound;
 }
 
-- (BOOL)_shouldAutoresize
+- (BOOL)_shouldAutoresize:(CGSize)oldSize
 {
     /*
         Autoresizing only occurs if:
         
-        - The width is increasing and:
-            - The last visible column is not at maxWidth
-            - Its right edge was on or to the right of the clip view's old right edge
-            - Its right edge is to the left of the clip view's current right edge
+        - The width is increasing and for the last visible column:
+            - Its old right edge was on or to the right of the clip view's old right edge
+            - Its current right edge is to the left of the clip view's current right edge
           OR
-        - The width is decreasing and:
-            - The last visible column is not at minWidth
-            - Its right edge was on or to the left of the clip view's old right edge
-            - Its right edge is to the right of the clip view's current right edge
+        - The width is decreasing and for the last visible column:
+            - Its old right edge was on or to the left of the clip view's old right edge
+            - Its current right edge is to the right of the clip view's current right edge
     */
-    
+        
     var clipBounds = [[self superview] bounds],
-        delta = _CGRectGetWidth(clipBounds) - _CGRectGetWidth([self bounds]);
-    
+        delta = _CGRectGetWidth(clipBounds) - oldSize.width;
+        
     if (delta == 0)
-        return NO;
+        return YES;
         
     var lastColumnIndex = [self _indexOfLastVisibleColumn];
     
@@ -1607,19 +1605,16 @@ var CPTableViewDefaultRowHeight = 23.0,
     UPDATE_COLUMN_RANGES_IF_NECESSARY();
     
     var clipRightEdge = _CGRectGetMaxX(clipBounds),
-        columnRightEdge = _CGRectGetMaxX([self rectOfColumn:lastColumnIndex]),
-        lastColumn = [_tableColumns objectAtIndex:lastColumnIndex];
+        columnRightEdge = _CGRectGetMaxX([self rectOfColumn:lastColumnIndex]);
     
     if (delta > 0)
     {
-        return (([lastColumn width] < [lastColumn maxWidth]) && 
-                (columnRightEdge >= clipRightEdge - delta)   &&
+        return ((columnRightEdge >= clipRightEdge - delta)   &&
                 (columnRightEdge < clipRightEdge));
     }
     else // delta < 0
     {
-        return (([lastColumn width] > [lastColumn minWidth]) && 
-                (columnRightEdge <= clipRightEdge - delta)   &&
+        return ((columnRightEdge <= clipRightEdge - delta)   &&
                 (columnRightEdge > clipRightEdge));
     }
 }
@@ -1685,16 +1680,14 @@ var CPTableViewDefaultRowHeight = 23.0,
         
         if (![column isHidden] && ([column resizingMask] & CPTableColumnAutoresizingMask))
         {
-            var proposedWidth = [column width] + proposedDelta;
-            
             if (proposedDelta > 0)
             {
-                if (proposedWidth <= [column maxWidth])
+                if ([column width] < [column maxWidth])
                     return index;
             }
             else
             {
-                if (proposedWidth >= [column minWidth])
+                if ([column width] > [column minWidth])
                     return index;
             }
         }
@@ -1740,7 +1733,7 @@ var CPTableViewDefaultRowHeight = 23.0,
 
 - (void)_autoresizeAllColumnsUniformlyWithOldSize:(CGSize)oldSize
 {
-    if (![self _shouldAutoresize])
+    if (![self _shouldAutoresize:oldSize])
         return;
 
     /*
@@ -1812,7 +1805,7 @@ var CPTableViewDefaultRowHeight = 23.0,
 
 - (void)_autoresizeColumnsSequentiallyWithOldSize:(CGSize)oldSize
 {
-    var delta = [self _visibleColumnDeltaToSuperview];
+    var delta = _CGRectGetWidth([[self superview] bounds]) - oldSize.width;
     
     if (delta > 0)
         [self _autoresizeColumn:CPTableViewResizeFirstAvailableColumn oldSize:oldSize];
@@ -1822,7 +1815,7 @@ var CPTableViewDefaultRowHeight = 23.0,
 
 - (void)_autoresizeColumnsReverseSequentiallyWithOldSize:(CGSize)oldSize
 {
-    var delta = [self _visibleColumnDeltaToSuperview];
+    var delta = _CGRectGetWidth([[self superview] bounds]) - oldSize.width;
     
     if (delta < 0)
         [self _autoresizeColumn:CPTableViewResizeFirstAvailableColumn oldSize:oldSize];
@@ -1832,7 +1825,7 @@ var CPTableViewDefaultRowHeight = 23.0,
 
 - (void)_autoresizeColumn:(CPTableViewResizeType)whichColumn oldSize:(CGSize)oldSize
 {
-    if (oldSize && ![self _shouldAutoresize])
+    if (oldSize && ![self _shouldAutoresize:oldSize])
         return;
         
     var indexOfColumnToResize,
