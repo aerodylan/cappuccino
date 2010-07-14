@@ -28,12 +28,12 @@
 @import "_CPCornerView.j"
 @import "CPScroller.j"
 
+#include "CoreGraphics/CGGeometry.h"
+
 CPTableViewColumnDidMoveNotification        = @"CPTableViewColumnDidMoveNotification";
 CPTableViewColumnDidResizeNotification      = @"CPTableViewColumnDidResizeNotification";
 CPTableViewSelectionDidChangeNotification   = @"CPTableViewSelectionDidChangeNotification";
 CPTableViewSelectionIsChangingNotification  = @"CPTableViewSelectionIsChangingNotification";
-
-#include "CoreGraphics/CGGeometry.h"
 
 var CPTableViewDataSource_numberOfRowsInTableView_                                                      = 1 << 0,
     CPTableViewDataSource_tableView_objectValueForTableColumn_row_                                      = 1 << 1,
@@ -262,8 +262,7 @@ var CPTableViewDefaultRowHeight = 23.0,
         _columnAutoResizingStyle = CPTableViewLastColumnOnlyAutoresizingStyle;
 
         [self setUsesAlternatingRowBackgroundColors:NO];
-        [self setAlternatingRowBackgroundColors:
-            [[CPColor whiteColor], [CPColor colorWithHexString:@"edf3fe"]]];
+        [self setAlternatingRowBackgroundColors:[[CPColor whiteColor], [CPColor colorWithHexString:@"edf3fe"]]];
 
         _tableColumns = [];
         _tableColumnRanges = [];
@@ -1512,9 +1511,8 @@ var CPTableViewDefaultRowHeight = 23.0,
 
 - (CPInteger)rowAtPoint:(CGPoint)aPoint
 {
-    var y = aPoint.y;
-
-    var row = FLOOR(y / (_rowHeight + _intercellSpacing.height));
+    var y = aPoint.y,
+        row = FLOOR(y / (_rowHeight + _intercellSpacing.height));
 
     if (row >= _numberOfRows)
         return -1;
@@ -2404,7 +2402,7 @@ var CPTableViewDefaultRowHeight = 23.0,
     {
         var numberOfRows = [self numberOfRows] + 1,
             reason = @"Attempt to set dropRow=" + row +
-                     " dropOperation=CPTableViewDropOn when [0 - " + numberOfRows + "] is valid range of rows."
+                     " dropOperation=CPTableViewDropOn when [0 - " + numberOfRows + "] is valid range of rows.";
 
         [[CPException exceptionWithName:@"Error" reason:reason userInfo:nil] raise];
     }
@@ -2896,7 +2894,7 @@ var CPTableViewDefaultRowHeight = 23.0,
 - (void)_drawHorizontalGridInClipRect:(CGRect)aRect
 {
     var context = [[CPGraphicsContext currentContext] graphicsPort],
-        exposedRows = [self rowsInRect:aRect];
+        exposedRows = [self rowsInRect:aRect],
         row = exposedRows.location,
         lastRow = CPMaxRange(exposedRows) - 1,
         rowY = -0.5,
@@ -3470,8 +3468,8 @@ var CPTableViewDefaultRowHeight = 23.0,
         dropInfo = [self _proposedDropInfoAtPoint:location],
         row = [dropInfo objectForKey:@"row"],
         dropOperation = [dropInfo objectForKey:@"operation"],
-        numberOfRows = [self numberOfRows];
-        dragOperation = [self _validateDrop:sender proposedRow:row proposedDropOperation:dropOperation];
+        numberOfRows = [self numberOfRows],
+        dragOperation = [self _validateDrop:sender proposedRow:row proposedDropOperation:dropOperation],
         _exposedRect = [self _exposedRect];
 
     [_dropOperationFeedbackView setHidden:(dragOperation == CPDragOperationNone)];
@@ -3516,7 +3514,7 @@ var CPTableViewDefaultRowHeight = 23.0,
 */
 - (BOOL)performDragOperation:(id)sender
 {
-    var location = [self convertPoint:[sender draggingLocation] fromView:nil];
+    var location = [self convertPoint:[sender draggingLocation] fromView:nil],
         info = [self _proposedDropInfoAtPoint:location],
         row = _retargetedDropRow;
 
@@ -3561,6 +3559,7 @@ var CPTableViewDefaultRowHeight = 23.0,
 
     var newSelection,
         shouldExtendSelection = NO;
+        
     // If cmd/ctrl was held down XOR the old selection with the proposed selection
     if ([self mouseDownFlags] & (CPCommandKeyMask | CPControlKeyMask | CPAlternateKeyMask))
     {
@@ -3719,27 +3718,28 @@ var CPTableViewDefaultRowHeight = 23.0,
         ![_delegate selectionShouldChangeInTableView:self])
         return;
 
-    var anEvent = [CPApp currentEvent];
+    var anEvent = [CPApp currentEvent],
+        i = -1;
     
     if ([[self selectedRowIndexes] count] > 0)
     {
-         var extend = NO;
+        var extend = NO;
 
-         if (([anEvent modifierFlags] & CPShiftKeyMask) && _allowsMultipleSelection)
-           extend = YES;
+        if (([anEvent modifierFlags] & CPShiftKeyMask) && _allowsMultipleSelection)
+            extend = YES;
 
-          var i = [[self selectedRowIndexes] firstIndex];
-          
-          if (i > 0)
-              i--; //set index to the prev row before the first row selected
+        i = [[self selectedRowIndexes] firstIndex];
+
+        if (i > 0)
+            i--; // set index to the prev row before the first row selected
     }
     else
     {
-      var extend = NO;
-      
-      //no rows are currently selected
-      if ([self numberOfRows] > 0)
-            var i = [self numberOfRows] - 1; //select the first row
+        var extend = NO;
+
+        // no rows are currently selected
+        if ([self numberOfRows] > 0)
+            i = [self numberOfRows] - 1; // select the first row
     }
 
 
@@ -3747,13 +3747,13 @@ var CPTableViewDefaultRowHeight = 23.0,
     {
         while ((![_delegate tableView:self shouldSelectRow:i]) && i > 0)
         {
-            //check to see if the row can be selected if it can't be then see if the prev row can be selected
+            // check to see if the row can be selected if it can't be then see if the prev row can be selected
             i--;
         }
 
-        //if the index still can be selected after the loop then just return
+        // if the index still can be selected after the loop then just return
         if (![_delegate tableView:self shouldSelectRow:i])
-        return;
+            return;
     }
 
     [self selectRowIndexes:[CPIndexSet indexSetWithIndex:i] byExtendingSelection:extend];
@@ -3928,8 +3928,8 @@ var CPTableViewDataSourceKey                = @"CPTableViewDataSourceKey",
     
     while (index != CPNotFound)
     {
-        var indexSet = (switchFlag) ? otherSet : self;
-        otherIndex = [indexSet indexGreaterThanOrEqualToIndex:index];
+        var indexSet = (switchFlag) ? otherSet : self,
+            otherIndex = [indexSet indexGreaterThanOrEqualToIndex:index];
         
         if (otherIndex == index)
         {

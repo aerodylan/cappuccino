@@ -629,7 +629,7 @@ var CPTableHeaderViewResizeZone = 3.0,
     {
         var tableColumn = [[_tableView tableColumns] objectAtIndex:overColumn],
             spacing = [_tableView intercellSpacing].width,
-            width = [tableColumn width],
+            width = [tableColumn width];
 
         if (width <= [tableColumn minWidth])
             [[CPCursor resizeRightCursor] set];
