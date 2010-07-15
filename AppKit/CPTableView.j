@@ -2790,7 +2790,7 @@ var CPTableViewDefaultRowHeight = 23.0,
 
     [self drawBackgroundInClipRect:exposedRect];
     [self highlightSelectionInClipRect:exposedRect];
-    [self _autoDrawGridInClipRect:exposedRect];
+    [self drawGridInClipRect:exposedRect];
 }
 
 - (void)drawBackgroundInClipRect:(CGRect)aRect
@@ -2873,22 +2873,11 @@ var CPTableViewDefaultRowHeight = 23.0,
     [self _drawVerticalGridInClipRect:aRect];
 }
 
-- (void)_autoDrawGridInClipRect:(CGRect)aRect
-{
-    [self _autoDrawHorizontalGridInClipRect:aRect];
-    [self _autoDrawVerticalGridInClipRect:aRect];
-}
-
-- (void)_autoDrawHorizontalGridInClipRect:(CGRect)aRect
+- (void)_drawHorizontalGridInClipRect:(CGRect)aRect
 {
     if (!(_gridStyleMask & CPTableViewSolidHorizontalGridLineMask))
         return;
         
-    [self _drawHorizontalGridInClipRect:aRect];
-}
-
-- (void)_drawHorizontalGridInClipRect:(CGRect)aRect
-{
     var context = [[CPGraphicsContext currentContext] graphicsPort],
         exposedRows = [self rowsInRect:aRect],
         row = exposedRows.location,
@@ -2926,16 +2915,11 @@ var CPTableViewDefaultRowHeight = 23.0,
     CGContextStrokePath(context);
 }
 
-- (void)_autoDrawVerticalGridInClipRect:(CGRect)aRect
+- (void)_drawVerticalGridInClipRect:(CGRect)aRect
 {
     if (!(_gridStyleMask & CPTableViewSolidVerticalGridLineMask))
         return;
         
-    [self _drawVerticalGridInClipRect:aRect];
-}
-
-- (void)_drawVerticalGridInClipRect:(CGRect)aRect
-{
     var exposedColumnIndexes = [self columnIndexesInRect:aRect],
         columnsArray = [];
 
@@ -3982,7 +3966,7 @@ var CPTableViewDataSourceKey                = @"CPTableViewDataSourceKey",
         [tableView highlightSelectionInClipRect:bounds];
     }
     
-    [tableView _autoDrawHorizontalGridInClipRect:bounds];
+    [tableView _drawHorizontalGridInClipRect:bounds];
     
     var minX = _CGRectGetMinX(bounds) + 0.5,
         maxX = _CGRectGetMaxX(bounds) - 0.5;
