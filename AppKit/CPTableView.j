@@ -389,7 +389,7 @@ var CPTableViewDefaultRowHeight = 23.0,
     if (!_dataSource)
         return;
 
-    var hasContentBinding = [self infoForBinding:@"content"] != nil;
+    var hasContentBinding = !![self infoForBinding:@"content"];
 
     if ([_dataSource respondsToSelector:@selector(numberOfRowsInTableView:)])
         _implementedDataSourceMethods |= CPTableViewDataSource_numberOfRowsInTableView_;
