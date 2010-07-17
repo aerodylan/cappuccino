@@ -34,7 +34,9 @@
         if ([aCoder containsValueForKey:"NSBGColor"])
             [self setBackgroundColor:[aCoder decodeObjectForKey:"NSBGColor"]];
         
-        //var flags = [aCoder decodeIntForKey:"NScvFlags"];
+        var flags = [aCoder decodeIntForKey:"NScvFlags"];
+        
+        _drawsBackground = !!(flags & 0x04);
     }
     
     return self;

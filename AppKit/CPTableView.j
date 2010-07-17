@@ -121,14 +121,15 @@ CPTableViewFirstColumnOnlyAutoresizingStyle = 5;
     return self;
 }
 
-- (void)drawRect:(CGRect)aRect
+- (void)drawRect:(CGRect)dirtyRect
 {
+    return;
     var frame = [self frame],
         context = [[CPGraphicsContext currentContext] graphicsPort];
 
     CGContextTranslateCTM(context, -_CGRectGetMinX(frame), -_CGRectGetMinY(frame));
 
-    [_tableView _drawRect:aRect];
+    [_tableView _drawRect:dirtyRect];
 }
 
 @end
@@ -166,7 +167,7 @@ var CPTableViewDefaultRowHeight = 23.0,
     CPIndexSet  _exposedRows;
     CPIndexSet  _exposedColumns;
 
-    Object      _dataViewsForTableColumns;
+    Object      _dataViewsForTableRows;
     Object      _cachedDataViews;
 
     //Configuring Behavior
@@ -205,8 +206,6 @@ var CPTableViewDefaultRowHeight = 23.0,
     CPDate      _startTrackingTimestamp;
     BOOL        _trackingPointMovedOutOfClickSlop;
     CGPoint     _editingCellIndex;
-
-    _CPTableDrawView _tableDrawView;
 
     SEL         _doubleAction;
     
@@ -315,16 +314,12 @@ var CPTableViewDefaultRowHeight = 23.0,
     _numberOfHiddenColumns = 0;
 
     _objectValues = { };
-    _dataViewsForTableColumns = { };
+    _dataViewsForTableRows = { };
     _dataViews=  [];
     _numberOfRows = 0;
     _exposedRows = [CPIndexSet indexSet];
     _exposedColumns = [CPIndexSet indexSet];
     _cachedDataViews = { };
-
-    _tableDrawView = [[_CPTableDrawView alloc] initWithTableView:self];
-    [_tableDrawView setBackgroundColor:[CPColor clearColor]];
-    [self addSubview:_tableDrawView];
 
     if (!_headerView)
         _headerView = [[CPTableHeaderView alloc] initWithFrame:_CGRectMake(0, 0, [self bounds].size.width, _rowHeight)];
@@ -461,7 +456,6 @@ var CPTableViewDefaultRowHeight = 23.0,
     // This updates the size too.
     [self noteNumberOfRowsChanged];
 
-    [self setNeedsLayout];
     [self setNeedsDisplay:YES];
 }
 
@@ -765,7 +759,7 @@ var CPTableViewDefaultRowHeight = 23.0,
         _dirtyTableColumnRangeIndex = MIN(NUMBER_OF_COLUMNS() - 1, _dirtyTableColumnRangeIndex);
 
     [self tile];
-    [self setNeedsLayout];
+    [self setNeedsDisplay:YES];
 }
 
 /*!
@@ -1005,9 +999,9 @@ var CPTableViewDefaultRowHeight = 23.0,
     [deselectRowIndexes getIndexes:deselectRows maxCount:-1 inIndexRange:CPMakeRange(firstExposedRow, exposedLength)];
     [selectRowIndexes getIndexes:selectRows maxCount:-1 inIndexRange:CPMakeRange(firstExposedRow, exposedLength)];
 
-    for (var identifier in _dataViewsForTableColumns)
+    for (var identifier in _dataViewsForTableRows)
     {
-        var dataViewsInTableColumn = _dataViewsForTableColumns[identifier];
+        var dataViewsInTableColumn = _dataViewsForTableRows[identifier];
 
         var count = deselectRows.length;
         
@@ -1023,9 +1017,9 @@ var CPTableViewDefaultRowHeight = 23.0,
 - (void)_performSelection:(BOOL)select forRow:(CPInteger)rowIndex context:(id)context
 {
     var view = context[rowIndex],
-        selector = select ? @"setThemeState:" : @"unsetThemeState:";
+        selector = select ? @selector(setThemeState:) : @selector(unsetThemeState:);
 
-    [view performSelector:CPSelectorFromString(selector) withObject:CPThemeStateSelectedDataView];
+    [view performSelector:selector withObject:CPThemeStateSelectedDataView];
 }
 
 - (void)_updateHighlightWithOldColumns:(CPIndexSet)oldColumns newColumns:(CPIndexSet)newColumns
@@ -1050,7 +1044,7 @@ var CPTableViewDefaultRowHeight = 23.0,
     {
         var columnIndex = deselectColumns[count],
             identifier = [_tableColumns[columnIndex] UID],
-            dataViewsInTableColumn = _dataViewsForTableColumns[identifier];
+            dataViewsInTableColumn = _dataViewsForTableRows[identifier];
 
         for (var i = 0; i < rowsCount; i++)
         {
@@ -1073,7 +1067,7 @@ var CPTableViewDefaultRowHeight = 23.0,
     {
         var columnIndex = selectColumns[count],
             identifier = [_tableColumns[columnIndex] UID],
-            dataViewsInTableColumn = _dataViewsForTableColumns[identifier];
+            dataViewsInTableColumn = _dataViewsForTableRows[identifier];
 
         for (var i = 0; i < rowsCount; i++)
         {
@@ -1535,37 +1529,45 @@ var CPTableViewDefaultRowHeight = 23.0,
                        _CGRectGetHeight(rectOfRow) - _intercellSpacing.height);
 }
 
-- (void)resizeWithOldSuperviewSize:(CGSize)aSize
+- (CGSize)_minimumFrameSize
 {
-    [super resizeWithOldSuperviewSize:aSize];
+    return _CGSizeMake([self _totalWidthOfTableView], [self _totalHeightOfTableView]);
+}
 
+- (void)_autoresizeToFit
+{
     if (_disableAutomaticResizing)
         return;
         
+    if (false)
+    {
     var mask = _columnAutoResizingStyle;
     
     switch (mask)
     {
         case CPTableViewUniformColumnAutoresizingStyle:
-            [self _autoresizeAllColumnsUniformlyWithOldSize:aSize];
+            [self _autoresizeAllColumnsUniformlyWithOldSize];
             break;
             
         case CPTableViewSequentialColumnAutoresizingStyle:
-            [self _autoresizeColumnsSequentiallyWithOldSize:aSize];
+            [self _autoresizeColumnsSequentiallyWithOldSize];
             break;
             
         case CPTableViewReverseSequentialColumnAutoresizingStyle:
-            [self _autoresizeColumnsReverseSequentiallyWithOldSize:aSize];
+            [self _autoresizeColumnsReverseSequentiallyWithOldSize];
             break;        
             
         case CPTableViewLastColumnOnlyAutoresizingStyle:
-            [self _autoresizeColumn:CPTableViewResizeLastColumn oldSize:aSize];
+            [self _autoresizeColumn:CPTableViewResizeLastColumn];
             break;
             
         case CPTableViewFirstColumnOnlyAutoresizingStyle:
-            [self _autoresizeColumn:CPTableViewResizeFirstColumn oldSize:aSize];
+            [self _autoresizeColumn:CPTableViewResizeFirstColumn];
             break;
     }
+    }
+    
+    [self tile];
 }
 
 - (int)_indexOfLastVisibleColumn
@@ -1708,12 +1710,14 @@ var CPTableViewDefaultRowHeight = 23.0,
     return [self _indexOfResizableColumnWithProposedDelta:proposedDelta inDirection:-1];
 }
 
-- (float)_totalVisibleColumnWidth
+- (float)_totalWidthOfTableView
 {
-    var index = [self _indexOfLastVisibleColumn],
-        rect = [self rectOfColumn:index];
-    
-    return _CGRectGetMaxX(rect);
+    return [_tableColumnRanges count] ? CPMaxRange([_tableColumnRanges lastObject]) : 0.0;
+}
+
+- (float)_totalHeightOfTableView
+{
+    return _numberOfRows * (_rowHeight + _intercellSpacing.height);
 }
 
 - (float)_constrainedWidthForTableColumn:(CPTableColumn)aColumn delta:(float)aDelta
@@ -1728,7 +1732,7 @@ var CPTableViewDefaultRowHeight = 23.0,
 - (float)_visibleColumnDeltaToSuperview
 {
     var superviewWidth = _CGRectGetWidth([[self superview] bounds]),
-        totalWidth = [self _totalVisibleColumnWidth];
+        totalWidth = [self _totalWidthOfTableColumns];
     
     return superviewWidth - totalWidth;
 }
@@ -1894,10 +1898,10 @@ var CPTableViewDefaultRowHeight = 23.0,
 
 - (void)noteNumberOfRowsChanged
 {
+    var oldNumberOfRows = _numberOfRows;
+
     _numberOfRows = nil;
     _numberOfRows = [self numberOfRows];
-
-    var oldNumberOfRows = _numberOfRows;
 
     // remove row indexes from the selection if they no longer exist
     var hangingSelections = oldNumberOfRows - _numberOfRows;
@@ -1907,8 +1911,13 @@ var CPTableViewDefaultRowHeight = 23.0,
         [_selectedRowIndexes removeIndexesInRange:CPMakeRange(_numberOfRows, hangingSelections)];
         [self _noteSelectionDidChange];
     }
-
-    [self tile];
+    
+    var size = [self frameSize];
+    
+    if ([_tableColumns count] > 0)
+        size.height = _CGRectGetHeight([self rectOfColumn:0]);
+        
+    [self setFrameSize:size];
 }
 
 - (void)tile
@@ -1916,10 +1925,12 @@ var CPTableViewDefaultRowHeight = 23.0,
     UPDATE_COLUMN_RANGES_IF_NECESSARY();
 
     // FIXME: variable row heights.
-    var width = _tableColumnRanges.length > 0 ? CPMaxRange([_tableColumnRanges lastObject]) : 0.0,
-        height = (_rowHeight + _intercellSpacing.height) * _numberOfRows,
+    var width = [self _totalWidthOfTableView],
+        height = [self _totalHeightOfTableView],
         superview = [self superview];
 
+    //console.log('CPTableView -tile: table: %f, %f', width, height);
+    
     if ([superview isKindOfClass:[CPClipView class]])
     {
         var superviewSize = [superview bounds].size;
@@ -1927,15 +1938,18 @@ var CPTableViewDefaultRowHeight = 23.0,
         width = MAX(superviewSize.width, width);
         height = MAX(superviewSize.height, height);
     }
+    
+    var newSize = _CGSizeMake(width, height);
+    
+    [self setFrameSize:newSize];
 
-    [self setFrameSize:_CGSizeMake(width, height)];
+    [[self enclosingScrollView] setVerticalLineScroll:_rowHeight + _intercellSpacing.height];
 
-    [self setNeedsLayout];
     [self setNeedsDisplay:YES];
+    [_headerView setNeedsDisplay:YES];
 }
 
 /*
-    * - tile
     * - sizeToFit
     * - noteHeightOfRowsWithIndexesChanged:
 */
@@ -2305,7 +2319,7 @@ var CPTableViewDefaultRowHeight = 23.0,
 - (CPView)_dragViewForColumn:(int)theColumnIndex
 {
     var headerFrame = [_headerView frame],
-        exposedRect = [self _exposedRect],
+        exposedRect = [self visibleRect],
         xScroll = _CGRectGetMinX(exposedRect),
         columnRect = [self rectOfColumn:theColumnIndex],
         tableColumn = [[self tableColumns] objectAtIndex:theColumnIndex],
@@ -2507,7 +2521,7 @@ var CPTableViewDefaultRowHeight = 23.0,
         _reloadAllRows = NO;
     }
 
-    var exposedRect = [self _exposedRect],
+    var exposedRect = [self visibleRect],
         exposedRows = [CPIndexSet indexSetWithIndexesInRange:[self rowsInRect:exposedRect]],
         exposedColumns = [self columnIndexesInRect:exposedRect],
         obscuredRows = [_exposedRows copy],
@@ -2538,8 +2552,6 @@ var CPTableViewDefaultRowHeight = 23.0,
 
     _exposedRows = exposedRows;
     _exposedColumns = exposedColumns;
-
-    [_tableDrawView setFrame:exposedRect];
 
     [self setNeedsDisplay:YES];
 
@@ -2595,9 +2607,9 @@ var CPTableViewDefaultRowHeight = 23.0,
         for (; rowIndex < rowsCount; ++rowIndex)
         {
             var row = rowArray[rowIndex],
-                dataView = _dataViewsForTableColumns[tableColumnUID][row];
+                dataView = _dataViewsForTableRows[tableColumnUID][row];
 
-            _dataViewsForTableColumns[tableColumnUID][row] = nil;
+            _dataViewsForTableRows[tableColumnUID][row] = nil;
 
             [self _enqueueReusableDataView:dataView];
         }
@@ -2631,8 +2643,8 @@ var CPTableViewDefaultRowHeight = 23.0,
 
         var tableColumnUID = [tableColumn UID];
 
-        if (!_dataViewsForTableColumns[tableColumnUID])
-            _dataViewsForTableColumns[tableColumnUID] = [];
+        if (!_dataViewsForTableRows[tableColumnUID])
+            _dataViewsForTableRows[tableColumnUID] = [];
 
         var rowIndex = 0,
             rowsCount = rowArray.length,
@@ -2653,7 +2665,7 @@ var CPTableViewDefaultRowHeight = 23.0,
             if ([dataView superview] !== self)
                 [self addSubview:dataView];
 
-            _dataViewsForTableColumns[tableColumnUID][row] = dataView;
+            _dataViewsForTableRows[tableColumnUID][row] = dataView;
 
             if (isButton || (_editingCellIndex && _editingCellIndex.x === column && _editingCellIndex.y === row))
             {
@@ -2698,7 +2710,7 @@ var CPTableViewDefaultRowHeight = 23.0,
         var column = columnArray[columnIndex],
             tableColumn = _tableColumns[column],
             tableColumnUID = [tableColumn UID],
-            dataViewsForTableColumn = _dataViewsForTableColumns[tableColumnUID],
+            dataViewsForTableColumn = _dataViewsForTableRows[tableColumnUID],
             columnRange = _tableColumnRanges[column];
 
         var rowIndex = 0,
@@ -2724,6 +2736,7 @@ var CPTableViewDefaultRowHeight = 23.0,
 
 - (CPView)preparedDataViewAtColumn:(CPInteger)column row:(CPInteger)row
 {
+    //console.log('preparedDataViewAtColumn:%d row:%d', column, row);
     var tableColumn = _tableColumns[column];
     
     if ((_implementedDelegateMethods & CPTableViewDelegate_tableView_dataViewForTableColumn_row_))
@@ -2768,39 +2781,113 @@ var CPTableViewDefaultRowHeight = 23.0,
         [_headerView setFrameSize:_CGSizeMake(_CGRectGetWidth([self frame]), _CGRectGetHeight([_headerView frame]))];
 }
 
-- (CGRect)_exposedRect
+- (void)drawRect:(CGRect)dirtyRect
 {
-    var superview = [self superview];
+    //console.log('drawRect: %f, %f, %f, %f', dirtyRect.origin.x, dirtyRect.origin.y, dirtyRect.size.width, dirtyRect.size.height);
+    var rect = [self bounds];
+    //console.log('table bounds: %f, %f, %f, %f', rect.origin.x, rect.origin.y, rect.size.width, rect.size.height);
+    
+    // Interset the dirty rect with the visible rect
+    var visibleRect = [self visibleRect];
+    
+    //console.log('visible rect: %f, %f, %f, %f', visibleRect.origin.x, visibleRect.origin.y, visibleRect.size.width, visibleRect.size.height);
+    dirtyRect = CGRectIntersection(dirtyRect, visibleRect);
+    //console.log('new dirtyRect: %f, %f, %f, %f', dirtyRect.origin.x, dirtyRect.origin.y, dirtyRect.size.width, dirtyRect.size.height);
+    [self drawBackgroundInClipRect:dirtyRect];
+    [self highlightSelectionInClipRect:dirtyRect];
+    
+    var exposedRows = [self rowsInRect:dirtyRect],
+        row = exposedRows.location,
+        lastRow = CPMaxRange(exposedRows) - 1;
+        
+    for (; row <= lastRow; ++row)
+        [self drawRow:row clipRect:dirtyRect];
+    
+    if ((_gridStyleMask & CPTableViewSolidHorizontalGridLineMask) ||
+        (_gridStyleMask & CPTableViewSolidVerticalGridLineMask))
+        [self drawGridInClipRect:dirtyRect];
 
-    if (![superview isKindOfClass:[CPClipView class]])
-        return [self bounds];
-
-    return [self convertRect:CGRectIntersection([superview bounds], [self frame]) fromView:superview];
 }
 
-- (void)setNeedsDisplay:(BOOL)aFlag
+- (void)drawRow:(CPInteger)rowIndex clipRect:(CGRect)clipRect
 {
-    [super setNeedsDisplay:aFlag];
-    [_tableDrawView setNeedsDisplay:aFlag];
+    var exposedColumnIndexes = [self columnIndexesInRect:clipRect],
+        indexes = [CPArray array];
+        
+    [exposedColumnIndexes getIndexes:indexes maxCount:-1 inIndexRange:nil];
+    
+    var indexCount = [indexes count];
+    
+    for (var columnIndex = 0; columnIndex < indexCount; ++columnIndex)
+    {
+        var tableColumn = _tableColumns[columnIndex];
+        
+        if ([tableColumn isHidden] || columnIndex === _draggedColumnIndex)
+            continue;
+
+        var columnIsSelected = [_selectedColumnIndexes containsIndex:columnIndex],
+            dataView = nil;
+
+        if (!_dataViewsForTableRows[rowIndex])
+            _dataViewsForTableRows[rowIndex] = [];
+        else if (_dataViewsForTableRows[rowIndex].length > columnIndex)
+            dataView = _dataViewsForTableRows[rowIndex][columnIndex];
+            
+        if (!dataView)
+        {
+            dataView = [self preparedDataViewAtColumn:columnIndex row:rowIndex];
+            _dataViewsForTableRows[rowIndex][columnIndex] = dataView;
+        }
+        else
+        {
+            //console.log('cached dataView at %d, %d', columnIndex, rowIndex);
+        }
+            
+        var isButton = [dataView isKindOfClass:[CPButton class]],
+            isTextField = [dataView isKindOfClass:[CPTextField class]];
+
+        if (columnIsSelected || [self isRowSelected:rowIndex])
+            [dataView setThemeState:CPThemeStateSelectedDataView];
+        else
+            [dataView unsetThemeState:CPThemeStateSelectedDataView];
+
+        if ([dataView superview] !== self)
+            [self addSubview:dataView];
+
+        if (isButton || (_editingCellIndex && _editingCellIndex.x === columnIndex && _editingCellIndex.y === rowIndex))
+        {
+            if (!isButton)
+                _editingCellIndex = undefined;
+
+            if (isTextField)
+            {
+                [dataView setEditable:YES];
+                [dataView setSendsActionOnEndEditing:YES];
+                [dataView setSelectable:YES];
+                [dataView selectText:nil]; // Doesn't seem to actually work (yet?).
+            }
+
+            [dataView setTarget:self];
+            [dataView setAction:@selector(_commitDataViewObjectValue:)];
+            dataView.tableViewEditedColumnObj = tableColumn;
+            dataView.tableViewEditedRowIndex = rowIndex;
+        }
+        else if (isTextField)
+        {
+            [dataView setEditable:NO];
+            [dataView setSelectable:NO];
+        }
+    }
 }
 
-- (void)_drawRect:(CGRect)aRect
-{
-    var exposedRect = [self _exposedRect];
-
-    [self drawBackgroundInClipRect:exposedRect];
-    [self highlightSelectionInClipRect:exposedRect];
-    [self drawGridInClipRect:exposedRect];
-}
-
-- (void)drawBackgroundInClipRect:(CGRect)aRect
+- (void)drawBackgroundInClipRect:(CGRect)clipRect
 {
     var context = [[CPGraphicsContext currentContext] graphicsPort];
     
     if (!_usesAlternatingRowBackgroundColors)
     {
         CGContextSetFillColor(context, [self backgroundColor]);
-        CGContextFillRect(context, aRect);
+        CGContextFillRect(context, clipRect);
         
         return;
     }
@@ -2814,14 +2901,14 @@ var CPTableViewDefaultRowHeight = 23.0,
     if (colorCount === 1)
     {
         CGContextSetFillColor(context, rowColors[0]);
-        CGContextFillRect(context, aRect);
+        CGContextFillRect(context, clipRect);
 
         return;
     }
     
     // console.profile("row-paint");
     
-    var exposedRows = [self rowsInRect:aRect],
+    var exposedRows = [self rowsInRect:clipRect],
         firstRow = exposedRows.location,
         lastRow = CPMaxRange(exposedRows) - 1,
         colorIndex = MIN(exposedRows.length, colorCount),
@@ -2836,7 +2923,7 @@ var CPTableViewDefaultRowHeight = 23.0,
 
         for (; row <= lastRow; row += colorCount)
             if (row >= firstRow)
-                CGContextAddRect(context, CGRectIntersection(aRect, fillRect = [self rectOfRow:row]));
+                CGContextAddRect(context, CGRectIntersection(clipRect, fillRect = [self rectOfRow:row]));
 
         if (row - colorCount === lastRow)
             heightFilled = _CGRectGetMaxY(fillRect);
@@ -2849,13 +2936,13 @@ var CPTableViewDefaultRowHeight = 23.0,
     
     // console.profileEnd("row-paint");
 
-    var totalHeight = _CGRectGetMaxY(aRect);
+    var totalHeight = _CGRectGetMaxY(clipRect);
 
     if (heightFilled >= totalHeight || _rowHeight <= 0.0)
         return;
 
     var rowHeight = _rowHeight + _intercellSpacing.height,
-        fillRect = _CGRectMake(_CGRectGetMinX(aRect), _CGRectGetMinY(aRect) + heightFilled, _CGRectGetWidth(aRect), rowHeight);
+        fillRect = _CGRectMake(_CGRectGetMinX(clipRect), _CGRectGetMinY(clipRect) + heightFilled, _CGRectGetWidth(clipRect), rowHeight);
 
     for (row = lastRow + 1; heightFilled < totalHeight; ++row)
     {
@@ -2867,24 +2954,24 @@ var CPTableViewDefaultRowHeight = 23.0,
     }
 }
 
-- (void)drawGridInClipRect:(CGRect)aRect
+- (void)drawGridInClipRect:(CGRect)clipRect
 {
-    [self _drawHorizontalGridInClipRect:aRect];
-    [self _drawVerticalGridInClipRect:aRect];
+    [self _drawHorizontalGridInClipRect:clipRect];
+    [self _drawVerticalGridInClipRect:clipRect];
 }
 
-- (void)_drawHorizontalGridInClipRect:(CGRect)aRect
+- (void)_drawHorizontalGridInClipRect:(CGRect)clipRect
 {
     if (!(_gridStyleMask & CPTableViewSolidHorizontalGridLineMask))
         return;
         
     var context = [[CPGraphicsContext currentContext] graphicsPort],
-        exposedRows = [self rowsInRect:aRect],
+        exposedRows = [self rowsInRect:clipRect],
         row = exposedRows.location,
         lastRow = CPMaxRange(exposedRows) - 1,
         rowY = -0.5,
-        minX = _CGRectGetMinX(aRect),
-        maxX = _CGRectGetMaxX(aRect);
+        minX = _CGRectGetMinX(clipRect),
+        maxX = _CGRectGetMaxX(clipRect);
 
     CGContextBeginPath(context);
     
@@ -2900,7 +2987,7 @@ var CPTableViewDefaultRowHeight = 23.0,
     if (_rowHeight > 0.0)
     {
         var rowHeight = _rowHeight + _intercellSpacing.height,
-            totalHeight = _CGRectGetMaxY(aRect);
+            totalHeight = _CGRectGetMaxY(clipRect);
 
         while (rowY < totalHeight)
         {
@@ -2915,12 +3002,12 @@ var CPTableViewDefaultRowHeight = 23.0,
     CGContextStrokePath(context);
 }
 
-- (void)_drawVerticalGridInClipRect:(CGRect)aRect
+- (void)_drawVerticalGridInClipRect:(CGRect)clipRect
 {
     if (!(_gridStyleMask & CPTableViewSolidVerticalGridLineMask))
         return;
         
-    var exposedColumnIndexes = [self columnIndexesInRect:aRect],
+    var exposedColumnIndexes = [self columnIndexesInRect:clipRect],
         columnsArray = [];
 
     [exposedColumnIndexes getIndexes:columnsArray maxCount:-1 inIndexRange:nil];
@@ -2928,8 +3015,8 @@ var CPTableViewDefaultRowHeight = 23.0,
     var context = [[CPGraphicsContext currentContext] graphicsPort],
         columnArrayIndex = 0,
         columnArrayCount = columnsArray.length,
-        minY = _CGRectGetMinY(aRect),
-        maxY = _CGRectGetMaxY(aRect);
+        minY = _CGRectGetMinY(clipRect),
+        maxY = _CGRectGetMaxY(clipRect);
         
     CGContextBeginPath(context);
     
@@ -2946,7 +3033,7 @@ var CPTableViewDefaultRowHeight = 23.0,
     CGContextStrokePath(context);
 }
 
-- (void)highlightSelectionInClipRect:(CGRect)aRect
+- (void)highlightSelectionInClipRect:(CGRect)clipRect
 {
     if (_selectionHighlightStyle === CPTableViewSelectionHighlightStyleNone)
         return;
@@ -2958,22 +3045,18 @@ var CPTableViewDefaultRowHeight = 23.0,
 
     if ([_selectedRowIndexes count] >= 1)
     {
-        var exposedRows = [CPIndexSet indexSetWithIndexesInRange:[self rowsInRect:aRect]],
-            firstRow = [exposedRows firstIndex],
-            exposedRange = CPMakeRange(firstRow, [exposedRows lastIndex] - firstRow + 1);
+        var exposedRows = [CPIndexSet indexSetWithIndexesInRange:[self rowsInRect:clipRect]];
 
-        [_selectedRowIndexes getIndexes:indexes maxCount:-1 inIndexRange:exposedRange];
+        [_selectedRowIndexes getIndexes:indexes maxCount:-1 inIndexRange:nil];
     }
     else if ([_selectedColumnIndexes count] >= 1)
     {
         highlightingColumns = YES;
         rectSelector = @selector(rectOfColumn:);
 
-        var exposedColumns = [self columnIndexesInRect:aRect],
-            firstColumn = [exposedColumns firstIndex],
-            exposedRange = CPMakeRange(firstColumn, [exposedColumns lastIndex] - firstColumn + 1);
+        var exposedColumns = [self columnIndexesInRect:clipRect];
 
-        [_selectedColumnIndexes getIndexes:indexes maxCount:-1 inIndexRange:exposedRange];
+        [_selectedColumnIndexes getIndexes:indexes maxCount:-1 inIndexRange:nil];
     }
 
     var count = [indexes count];
@@ -2992,7 +3075,7 @@ var CPTableViewDefaultRowHeight = 23.0,
     for (var i = 0; i < count; i++)
     {
         var index = indexes[i],
-            rect = CGRectIntersection([self performSelector:rectSelector withObject:index], aRect);
+            rect = CGRectIntersection([self performSelector:rectSelector withObject:index], clipRect);
         
         if (highlightingColumns)
         {
@@ -3045,7 +3128,7 @@ var CPTableViewDefaultRowHeight = 23.0,
 
 - (void)layoutSubviews
 {
-    [self load];
+    //[self load];
 }
 
 - (void)viewWillMoveToSuperview:(CPView)aView
@@ -3087,13 +3170,15 @@ var CPTableViewDefaultRowHeight = 23.0,
 
 - (void)superviewBoundsChanged:(CPNotification)aNotification
 {
+    //console.log('CPTableView -superviewBoundsChanged')
     [self setNeedsDisplay:YES];
-    [self setNeedsLayout];
 }
 
 - (void)superviewFrameChanged:(CPNotification)aNotification
 {
-    [self tile];
+    var rect = [[self superview] frame];
+    //console.log('CPTableView -superviewFrameChanged: %f, %f', rect.size.width, rect.size.height);
+    [self _autoresizeToFit];
 }
 
 /*
@@ -3450,7 +3535,7 @@ var CPTableViewDefaultRowHeight = 23.0,
         dropOperation = [dropInfo objectForKey:@"operation"],
         numberOfRows = [self numberOfRows],
         dragOperation = [self _validateDrop:sender proposedRow:row proposedDropOperation:dropOperation],
-        _exposedRect = [self _exposedRect];
+        visibleRect = [self visibleRect];
 
     [_dropOperationFeedbackView setHidden:(dragOperation == CPDragOperationNone)];
     
@@ -3463,7 +3548,7 @@ var CPTableViewDefaultRowHeight = 23.0,
     var rect = _CGRectMakeZero();
 
     if (row === -1)
-        rect = _exposedRect;
+        rect = visibleRect;
     else if (dropOperation === CPTableViewDropAbove)
         rect = [self _rectForDropHighlightViewBetweenUpperRow:row - 1 andLowerRow:row offset:location];
     else
@@ -3932,13 +4017,13 @@ var CPTableViewDataSourceKey                = @"CPTableViewDataSourceKey",
     CPView      columnClipView  @accessors;
 }
 
-- (void)drawRect:(CGRect)aRect
+- (void)drawRect:(CGRect)dirtyRect
 {
     var context = [[CPGraphicsContext currentContext] graphicsPort],
         columnRect = [tableView rectOfColumn:columnIndex],
         headerHeight = _CGRectGetHeight([[tableView headerView] frame]),
         bounds = [columnClipView bounds],
-        exposedRect = [tableView _exposedRect],
+        exposedRect = [tableView visibleRect],
         xScroll = _CGRectGetMinX(exposedRect),
         yScroll = _CGRectGetMinY(exposedRect);
     
@@ -4021,7 +4106,7 @@ var CPDropOperationIndicatorHeight = 8;
     CGContextStrokePath(context);
 }
 
-- (void)drawRect:(CGRect)aRect
+- (void)drawRect:(CGRect)dirtyRect
 {
     if (tableView._destinationDragStyle === CPTableViewDraggingDestinationFeedbackStyleNone || 
         [[tableView headerView] isDragging] ||
@@ -4043,7 +4128,7 @@ var CPDropOperationIndicatorHeight = 8;
     {
         // if row is selected don't fill and stroke white
         var selectedRows = [tableView selectedRowIndexes],
-            newRect = _CGRectInset(aRect, 2.0, 2.0);
+            newRect = _CGRectInset(dirtyRect, 2.0, 2.0);
             
         --newRect.size.height;
 
@@ -4068,9 +4153,9 @@ var CPDropOperationIndicatorHeight = 8;
         var selectedRows = [tableView selectedRowIndexes];
 
         if ([selectedRows containsIndex:currentRow - 1] || [selectedRows containsIndex:currentRow])
-            [self _drawDropAboveIndicatorWithContext:context rect:aRect color:[CPColor whiteColor] width:4];
+            [self _drawDropAboveIndicatorWithContext:context rect:dirtyRect color:[CPColor whiteColor] width:4];
             
-        [self _drawDropAboveIndicatorWithContext:context rect:aRect color:[CPColor colorWithHexString:@"4886ca"] width:3];
+        [self _drawDropAboveIndicatorWithContext:context rect:dirtyRect color:[CPColor colorWithHexString:@"4886ca"] width:3];
     }
 }
 

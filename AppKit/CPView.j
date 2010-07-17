@@ -746,6 +746,15 @@ var CPViewFlags                     = { },
     return _CGSizeMakeCopy(_frame.size);
 }
 
+/*
+    This is a crucial private interface used by CPScrollView and overridden by view classes that can be within
+    a CPScrollView and can size to fit, such as CPTableView.
+*/
+- (CGSize)_minimumFrameSize
+{
+    return _CGSizeMakeCopy(_frame.size);
+}
+
 /*!
     Moves the center of the receiver's frame to the provided point. The point is defined in the superview's coordinate system. 
     The method posts a CPViewFrameDidChangeNotification to the default notification center if the receiver 

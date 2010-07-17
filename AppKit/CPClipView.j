@@ -37,6 +37,21 @@
     CPView  _documentView;
 }
 
+- (void)setDrawsBackground:(BOOL)drawsBackground
+{
+    if (_drawsBackground == drawsBackground)
+        return;
+        
+    _drawsBackground = !!drawsBackground;
+    
+    [self setNeedsDisplay:YES];
+}
+
+- (BOOL)drawsBackground
+{
+    return _drawsBackground;
+}
+
 /*!
     Sets the document view to be \c aView.
     @param aView the new document view. It's frame origin will be changed to \c (0,0) after calling this method.
@@ -95,6 +110,36 @@
 }
 
 /*!
+    Returns the rectangle defining the document view’s frame, 
+    adjusted to the size of the receiver if the document view is smaller.
+    
+    In other words, this rectangle is always at least as large as the receiver itself.
+*/
+- (CGRect)documentRect
+{
+    if (_documentView)
+    {
+        var documentFrame = [_documentView frame],
+            documentFrame = _CGRectOffset(documentFrame, -_CGRectGetMinX(documentFrame), -CGRectGetMinY(documentFrame)),
+            clipFrame = [self frame],
+            clipFrame = _CGRectOffset(clipFrame, -_CGRectGetMinX(clipFrame), -CGRectGetMinY(clipFrame));
+            
+        return CGRectUnion(documentFrame, clipFrame);
+    }
+    else
+        return _CGRectMakeZero();
+}
+
+/*!
+    Returns the exposed rectangle of the receiver’s document view, 
+    in the document view’s own coordinate system.
+*/
+- (CGRect)documentVisibleRect
+{
+    return _documentView ? [_documentView visibleRect] : _CGRectMakeZero();
+}
+
+/*!
     Returns a new point that may be adjusted from \c aPoint
     to make sure it lies within the document view.
     @param aPoint
@@ -113,23 +158,6 @@
     return aPoint;
 }
 
-- (void)setBoundsOrigin:(CGPoint)aPoint
-{
-    if (_CGPointEqualToPoint(_bounds.origin, aPoint))
-        return;
-        
-    [super setBoundsOrigin:aPoint];
-
-    var superview = [self superview],
-
-        // This is hack to avoid having to import CPScrollView.
-        // FIXME: Should CPScrollView be finding out about this on its own somehow?
-        scrollViewClass = objj_getClass("CPScrollView");
-
-    if([superview isKindOfClass:scrollViewClass])
-        [superview reflectScrolledClipView:self];
-}
-
 /*!
     Scrolls the clip view to the specified point. The method
     sets its bounds origin to \c aPoint.
@@ -139,13 +167,44 @@
     [self setBoundsOrigin:[self constrainScrollPoint:aPoint]];
 }
 
+- (CGPoint)_scrollPoint
+{
+    return [self bounds].origin;
+}
+
+- (void)setFrame:(CGRect)frameRect
+{
+    var oldFrame = [self frame];
+    //console.log('CPClipView -setFrame: %f, %f', frameRect.size.width, frameRect.size.height);
+    [super setFrame:frameRect];
+    
+    if (!_CGRectEqualToRect(oldFrame, frameRect))
+        [self _selfBoundsChanged];
+}
+
+- (void)setBoundsOrigin:(CGPoint)newOrigin
+{
+    var oldOrigin = [self bounds].origin;
+    
+    [super setBoundsOrigin:newOrigin];
+    
+    if (!_CGPointEqualToPoint(oldOrigin, newOrigin))
+        [self _selfBoundsChanged];
+}
+
+- (void)_selfBoundsChanged
+{
+    //console.log('CPClipView -_selfBoundsChanged: %f, %f', [self bounds].size.width, [self bounds].size.height);
+    [self _reflectDocumentViewChanged];
+}
+
 /*!
     Handles a CPViewBoundsDidChangeNotification.
     @param aNotification the notification event
 */
 - (void)viewBoundsChanged:(CPNotification)aNotification
 {
-    [self _constrainScrollPoint];
+    [self _reflectDocumentViewChanged];
 }
 
 /*!
@@ -154,37 +213,17 @@
 */
 - (void)viewFrameChanged:(CPNotification)aNotification
 {
-    [self _constrainScrollPoint];
+    var view = [aNotification object];        
+    var rect = [view frame];
+    //console.log('CPClipView -viewFrameChanged: %f, %f, %f, %f', rect.origin.x, rect.origin.y, rect.size.width, rect.size.height);
+    
+    [self _reflectDocumentViewChanged];
 }
 
-- (void)resizeSubviewsWithOldSize:(CGSize)aSize
+- (void)_reflectDocumentViewChanged
 {
-    [super resizeSubviewsWithOldSize:aSize];
-    [self _constrainScrollPoint];
-}
-
-- (void)_constrainScrollPoint
-{
-    var oldScrollPoint = [self bounds].origin;
-    
-    // Call scrollToPoint: because the current scroll point may no longer make 
-    // sense given the new frame of the document view.
-    [self scrollToPoint:oldScrollPoint];
-    
-    // scrollToPoint: takes care of reflectScrollClipView: for us, so bail if 
-    // the scroll points are not equal (meaning scrollToPoint: didn't early bail).
-    if (!CGPointEqualToPoint(oldScrollPoint, [self bounds].origin))
-        return;
-
-    // ... and we're in a scroll view of course.
-    var superview = [self superview],
-
-        // This is hack to avoid having to import CPScrollView.
-        // FIXME: Should CPScrollView be finding out about this on its own somehow?
-        scrollViewClass = objj_getClass("CPScrollView");
-
-    if ([superview isKindOfClass:scrollViewClass])
-        [superview reflectScrolledClipView:self];
+    //console.log('CPClipView -_reflectDocumentViewChanged');
+    [[self enclosingScrollView] reflectScrolledClipView:self];
 }
 
 - (BOOL)autoscroll:(CPEvent)anEvent 
@@ -228,14 +267,19 @@
 @end
 
 
-var CPClipViewDocumentViewKey = @"CPScrollViewDocumentView";
+var CPClipViewDocumentViewKey = @"CPScrollViewDocumentView",
+    CPClipViewDrawsBackgroundKey = @"CPClipViewDrawsBackground";
 
 @implementation CPClipView (CPCoding)
 
 - (id)initWithCoder:(CPCoder)aCoder
 {
     if (self = [super initWithCoder:aCoder])
+    {
         [self setDocumentView:[aCoder decodeObjectForKey:CPClipViewDocumentViewKey]];
+        
+        _drawsBackground = [aCoder decodeBoolForKey:CPClipViewDrawsBackgroundKey];
+    }
     
     return self;
 }
@@ -245,6 +289,7 @@ var CPClipViewDocumentViewKey = @"CPScrollViewDocumentView";
     [super encodeWithCoder:aCoder];
     
     [aCoder encodeObject:_documentView forKey:CPClipViewDocumentViewKey];
+    [aCoder encodeBool:_drawsBackground forKey:CPClipViewDrawsBackgroundKey];
 }
 
 @end
