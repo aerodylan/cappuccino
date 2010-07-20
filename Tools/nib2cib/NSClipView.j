@@ -37,6 +37,7 @@
         var flags = [aCoder decodeIntForKey:"NScvFlags"];
         
         _drawsBackground = !!(flags & 0x04);
+        _copiesOnScroll = !!(~flags & 0x02);  // _copiesOnScroll is on if bit is off
     }
     
     return self;
