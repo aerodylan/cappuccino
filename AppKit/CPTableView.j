@@ -338,6 +338,7 @@ var CPTableViewDefaultRowHeight = 23.0,
     
     _draggedColumnIndex = -1;
     _draggedColumnIsSelected = NO;
+    _differedColumnDataToRemove = [ ];
 
     // Gradients for the source list
     _sourceListActiveGradient = CGGradientCreateWithColorComponents(CGColorSpaceCreateDeviceRGB(), [116.0/255.0, 163.0/255.0, 220.0/255.0,1.0, 48.0/255.0, 100.0/255.0, 183.0/255.0,1.0], [0,1], 2);
@@ -2779,6 +2780,12 @@ var CPTableViewDefaultRowHeight = 23.0,
 }
 
 - (void)setNeedsDisplay:(BOOL)aFlag
+{
+    [super setNeedsDisplay:aFlag];
+    [_tableDrawView setNeedsDisplay:aFlag];
+}
+
+- (void)_drawRect:(CGRect)aRect
 {
     [super setNeedsDisplay:aFlag];
     [_tableDrawView setNeedsDisplay:aFlag];
