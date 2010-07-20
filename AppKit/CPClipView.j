@@ -34,23 +34,20 @@
 */
 @implementation CPClipView : CPView
 {
-    CPView  _documentView;
+    CPView          _documentView;
+    CPScrollView    _scrollView;
+    BOOL            _copiesOnScroll;
 }
 
-- (void)setDrawsBackground:(BOOL)drawsBackground
+- (id)initWithFrame:(CGRect)aFrame
 {
-    if (_drawsBackground == drawsBackground)
-        return;
-        
-    _drawsBackground = !!drawsBackground;
+    var self = [super initWithFrame:aFrame];
     
-    [self setNeedsDisplay:YES];
+    if (self)
+        _copiesOnScroll = YES;
 }
 
-- (BOOL)drawsBackground
-{
-    return _drawsBackground;
-}
+// Setting the Document View
 
 /*!
     Sets the document view to be \c aView.
@@ -84,6 +81,12 @@
     {
         [self addSubview:_documentView];
         
+        [self setBoundsOrigin:[_documentView frame].origin];
+        [self setBackgroundColor:[_documentView backgroundColor]];
+        
+        if ([_documentView respondsToSelector:@selector(drawsBackground)])
+            [self setDrawsBackground:[_documentView drawsBackground]];
+        
 		[_documentView setPostsFrameChangedNotifications:YES];
 		[_documentView setPostsBoundsChangedNotifications:YES];
 
@@ -99,6 +102,9 @@
                    name:CPViewBoundsDidChangeNotification 
                  object:_documentView];
     }
+    
+    [_scrollView _setDocumentMinFrameSize:[_documentView _minimumFrameSize]];
+    [_scrollView reflectScrolledClipView:self];
 }
 
 /*!
@@ -109,34 +115,54 @@
     return _documentView;
 }
 
-/*!
-    Returns the rectangle defining the document view’s frame, 
-    adjusted to the size of the receiver if the document view is smaller.
-    
-    In other words, this rectangle is always at least as large as the receiver itself.
-*/
-- (CGRect)documentRect
-{
-    if (_documentView)
-    {
-        var documentFrame = [_documentView frame],
-            documentFrame = _CGRectOffset(documentFrame, -_CGRectGetMinX(documentFrame), -CGRectGetMinY(documentFrame)),
-            clipFrame = [self frame],
-            clipFrame = _CGRectOffset(clipFrame, -_CGRectGetMinX(clipFrame), -CGRectGetMinY(clipFrame));
-            
-        return CGRectUnion(documentFrame, clipFrame);
-    }
-    else
-        return _CGRectMakeZero();
-}
+// Scrolling
 
 /*!
-    Returns the exposed rectangle of the receiver’s document view, 
-    in the document view’s own coordinate system.
+    Scrolls the clip view to the specified point. The method
+    sets its bounds origin to \c aPoint.
 */
-- (CGRect)documentVisibleRect
+- (void)scrollToPoint:(CGPoint)aPoint
 {
-    return _documentView ? [_documentView visibleRect] : _CGRectMakeZero();
+    [self setBoundsOrigin:[self constrainScrollPoint:aPoint]];
+}
+
+- (BOOL)autoscroll:(CPEvent)anEvent 
+{
+    var bounds = [self bounds],
+        eventLocation = [self convertPoint:[anEvent locationInWindow] fromView:nil],
+        deltaX = 0,
+        deltaY = 0;
+
+    if (_CGRectContainsPoint(bounds, eventLocation))
+        return NO;
+
+    var scrollView = _scrollView;
+    
+    if (!scrollView || [scrollView hasVerticalScroller])
+    {
+        if (eventLocation.y < _CGRectGetMinY(bounds))
+            deltaY = _CGRectGetMinY(bounds) - eventLocation.y;
+        else if (eventLocation.y > _CGRectGetMaxY(bounds))
+            deltaY = _CGRectGetMaxY(bounds) - eventLocation.y;
+        if (deltaY < -bounds.size.height)
+            deltaY = -bounds.size.height;
+        if (deltaY > bounds.size.height)
+            deltaY = bounds.size.height;
+    }
+
+    if (!scrollView || [scrollView hasHorizontalScroller])
+    {
+        if (eventLocation.x < _CGRectGetMinX(bounds))
+            deltaX = _CGRectGetMinX(bounds) - eventLocation.x;
+        else if (eventLocation.x > _CGRectGetMaxX(bounds))
+            deltaX = _CGRectGetMaxX(bounds) - eventLocation.x;
+        if (deltaX < -bounds.size.width)
+            deltaX = -bounds.size.width;
+        if (deltaX > bounds.size.width)
+            deltaX = bounds.size.width;
+    }
+
+	return [self _scrollToPoint:_CGPointMake(bounds.origin.x - deltaX, bounds.origin.y - deltaY)];
 }
 
 /*!
@@ -158,44 +184,266 @@
     return aPoint;
 }
 
-/*!
-    Scrolls the clip view to the specified point. The method
-    sets its bounds origin to \c aPoint.
-*/
-- (void)scrollToPoint:(CGPoint)aPoint
-{
-    [self setBoundsOrigin:[self constrainScrollPoint:aPoint]];
+// Determining Scrolling Efficiency
+
+- (void)setCopiesOnScroll:(BOOL)flag
+{        
+    _copiesOnScroll = !!flag;
 }
 
-- (CGPoint)_scrollPoint
+- (BOOL)copiesOnScroll
 {
-    return [self bounds].origin;
+    return _copiesOnScroll;
 }
+
+// Getting the Visible Portion
+
+/*!
+    Returns the rectangle defining the document view’s frame, 
+    adjusted to the size of the receiver if the document view is smaller.
+    
+    In other words, this rectangle is always at least as large as the receiver itself.
+*/
+- (CGRect)documentRect
+{
+    if (_documentView)
+    {
+        var documentFrame = [_documentView frame],
+            bounds = [self bounds],
+            rect = _CGRectMake(_CGRectGetMinX(documentFrame),
+                               _CGRectGetMinY(documentFrame),
+                               MAX(_CGRectGetWidth(documentFrame), _CGRectGetWidth(bounds)),
+                               MAX(_CGRectGetHeight(documentFrame), _CGRectGetHeight(bounds)));
+            
+        return rect;
+    }
+    else
+        return _CGRectMakeZero();
+}
+
+/*!
+    Returns the exposed rectangle of the receiver’s document view, 
+    in the document view’s own coordinate system.
+*/
+- (CGRect)documentVisibleRect
+{
+    return [self convertRect:_bounds toView:_documentView];
+}
+
+// Working With Background Color
+
+- (BOOL)drawsBackground
+{
+    return _drawsBackground;
+}
+
+- (void)setDrawsBackground:(BOOL)drawsBackground
+{
+    if (_drawsBackground == drawsBackground)
+        return;
+        
+    _drawsBackground = !!drawsBackground;
+    
+    [self setNeedsDisplay:YES];
+}
+
+- (void)setBackgroundColor:(CPColor)aColor
+{
+    if ([[self backgroundColor] isEqual:aColor])
+        return;
+        
+    [super setBackgroundColor:aColor];
+    [self setNeedsDisplay:YES];
+}
+
+// CPView Overrides
 
 - (void)setFrame:(CGRect)frameRect
 {
-    var oldFrame = [self frame];
-    //console.log('CPClipView -setFrame: %f, %f', frameRect.size.width, frameRect.size.height);
-    [super setFrame:frameRect];
+    var frame = [self frame];
     
-    if (!_CGRectEqualToRect(oldFrame, frameRect))
-        [self _selfBoundsChanged];
+    if (_CGRectEqualToRect(frameRect, frame))
+        return;
+        
+    [super setFrame:frameRect];
+    [self _documentViewChanged];
+}
+
+- (void)setFrameSize:(CGSize)aSize
+{
+    var size = [self frameSize];
+    
+    if (_CGSizeEqualToSize(aSize, size))
+        return;
+        
+    [super setFrameSize:aSize];
+    
+    // setFrameSize is invoked by setFrame, avoid duplicate _documentViewChanged messages
+    if (!_inhibitFrameAndBoundsChangedNotifications)
+        [self _documentViewChanged];
+}
+
+- (void)setFrameOrigin:(CGPoint)aPoint
+{
+    var origin = [self frameOrigin];
+    
+    if (_CGPointEqualToPoint(aPoint, origin))
+        return;
+        
+    [super setFrameOrigin:aPoint];
+    
+    // setFrameOrigin is invoked by setFrame, avoid duplicate _documentViewChanged messages
+    if (!_inhibitFrameAndBoundsChangedNotifications)
+        [self _documentViewChanged];
+}
+
+- (void)setBounds:(CGRect)aRect
+{
+    var bounds = [self bounds];
+    
+    if (_CGRectEqualToRect(aRect, bounds))
+        return;
+        
+    [super setBounds:aRect];
+    
+    [_scrollView reflectScrolledClipView];
+    [_documentView setNeedsDisplay:YES];
+}
+
+- (void)setBoundsSize:(CGSize)aSize
+{
+    var size = [self bounds].size;
+    
+    if (_CGSizeEqualToSize(aSize, size))
+        return;
+        
+    [super setBoundsSize:aSize];
+    
+    // setBoundsSize is invoked by setBounds, avoid duplicate _documentViewChanged messages
+    if (!_inhibitFrameAndBoundsChangedNotifications)
+    {
+        [_scrollView reflectScrolledClipView];
+        [_documentView setNeedsDisplay:YES];
+    }
 }
 
 - (void)setBoundsOrigin:(CGPoint)newOrigin
 {
-    var oldOrigin = [self bounds].origin;
-    
-    [super setBoundsOrigin:newOrigin];
-    
-    if (!_CGPointEqualToPoint(oldOrigin, newOrigin))
-        [self _selfBoundsChanged];
-}
+    var oldBounds = [self bounds],
+        oldOrigin = oldBounds.origin;
 
-- (void)_selfBoundsChanged
-{
-    //console.log('CPClipView -_selfBoundsChanged: %f, %f', [self bounds].size.width, [self bounds].size.height);
-    [self _reflectDocumentViewChanged];
+    if (_CGPointEqualToPoint(newOrigin, oldOrigin))
+        return;
+
+    // setBoundsOrigin is invoked by setBounds, avoid duplicate _documentViewChanged messages
+    if (_inhibitFrameAndBoundsChangedNotifications || !_documentView)
+    {
+        [super setBoundsOrigin:newOrigin];
+        return;
+    }
+    
+    // Code below ported from GNUstep
+    var newBounds = _CGRectMakeCopy(oldBounds),
+        intersection;
+
+    newBounds.origin = newOrigin;
+
+    if (_copiesOnScroll && [self window])
+    {
+        /*
+            Copy the portion of the view that is common before and after
+            scrolling. Then the document view needs to redraw the remaining areas.
+        */
+
+        intersection = CGRectIntersection(oldBounds, newBounds);
+        intersection = CGRectIntersection(intersection, [self visibleRect]);
+        intersection = [self _integralRect:intersection];
+
+        /*
+            At this point, intersection is the rectangle containing the
+            image we can recycle from the old to the new situation. We
+            must not make any assumption on its position/size, because it
+            has been intersected with visible rect, which is an arbitrary
+            rectangle as far as we know.
+        */
+        var zeroRect = _CGRectMakeZero();
+        
+        if (_CGRectEqualToRect(intersection, zeroRect))
+        {
+            // No recyclable part, docview should redraw everything
+            [super setBoundsOrigin: newBounds.origin];
+            [_documentView setNeedsDisplayInRect:[self documentVisibleRect]];
+        }
+        else
+        {
+            var dx = newBounds.origin.x - oldBounds.origin.x,
+                dy = newBounds.origin.y - oldBounds.origin.y;
+
+            // Copy the intersection to the new position
+            [self scrollRect:intersection by:_CGSizeMake(-dx, -dy)];
+
+            // Change coordinate system to the new one
+            [super setBoundsOrigin:newBounds.origin];
+
+            // Get the rectangle representing intersection in the new
+            // bounds (mainly to keep code readable)
+            intersection.origin.x -= dx;
+            intersection.origin.y -= dy;
+
+            /*
+                Now mark everything which is outside intersection as
+                needing to be redrawn by hand. NB: During simple usage -
+                scrolling in a single direction (left/rigth/up/down) -
+                and a normal visible rect, only one of the following
+                rects will be non-empty.
+            */
+
+            // To the left of intersection
+            var bounds = [self bounds],
+                redrawRect = _CGRectMake(_CGRectGetMinX(bounds), 
+                                         _CGRectGetMinY(bounds),
+                                         _CGRectGetMinX(intersection) - _CGRectGetMinX(bounds),
+                                         _CGRectGetHeight(bounds));
+            
+            if (!_CGRectIsEmpty(redrawRect))
+                [_documentView setNeedsDisplayInRect:[self convertRect:redrawRect toView:_documentView]];
+
+            // To the right of the intersection
+            redrawRect = _CGRectMake(_CGRectGetMaxX(intersection), 
+                                     _CGRectGetMinY(bounds),
+                                     _CGRectGetMaxX(bounds) - _CGRectGetMaxX(intersection),
+                                     _CGRectGetHeight(bounds));
+                                     
+            if (!_CGRectIsEmpty(redrawRect))
+                [_documentView setNeedsDisplayInRect:[self convertRect:redrawRect toView:_documentView]];
+
+            // Above the intersection
+            redrawRect = _CGRectMake(_CGRectGetMinX(bounds), 
+                                     _CGRectGetMinY(bounds),
+                                     _CGRectGetWidth(bounds),
+                                     _CGRectGetMinY(intersection) - _CGRectGetMinY(bounds));
+            
+            if (!_CGRectIsEmpty(redrawRect))
+                [_documentView setNeedsDisplayInRect:[self convertRect:redrawRect toView:_documentView]];
+
+            // Below the intersection
+            redrawRect = _CGRectMake(_CGRectGetMinX(bounds), 
+                                     _CGRectGetMaxY(intersection),
+                                     _CGRectGetWidth(bounds),
+                                     _CGRectGetMaxY(bounds) - _CGRectGetMaxY(intersection));
+                                     
+            if (!_CGRectIsEmpty(redrawRect))
+                [_documentView setNeedsDisplayInRect:[self convertRect:redrawRect toView:_documentView]];
+        }
+    }
+    else // _copiesOnScroll == NO
+    {
+        // Don't copy anything, docview draws it all
+        [super setBoundsOrigin:newBounds.origin];
+        [_documentView setNeedsDisplayInRect:[self documentVisibleRect]];
+    }
+
+    [_scrollView reflectScrolledClipView:self];
 }
 
 /*!
@@ -204,7 +452,7 @@
 */
 - (void)viewBoundsChanged:(CPNotification)aNotification
 {
-    [self _reflectDocumentViewChanged];
+    [_scrollView reflectScrolledClipView:self];
 }
 
 /*!
@@ -213,72 +461,72 @@
 */
 - (void)viewFrameChanged:(CPNotification)aNotification
 {
-    var view = [aNotification object];        
-    var rect = [view frame];
-    //console.log('CPClipView -viewFrameChanged: %f, %f, %f, %f', rect.origin.x, rect.origin.y, rect.size.width, rect.size.height);
+    var bounds = [self bounds];
     
-    [self _reflectDocumentViewChanged];
+    [self _scrollToPoint:bounds.origin];
+    [_scrollView reflectScrolledClipView:self];
 }
 
-- (void)_reflectDocumentViewChanged
+- (void)viewDidMoveToSuperview:(CPView)newSuperview
 {
-    //console.log('CPClipView -_reflectDocumentViewChanged');
-    [[self enclosingScrollView] reflectScrolledClipView:self];
+    if ([newSuperview isKindOfClass:[CPScrollView class]])
+        _scrollView = newSuperview;
+    else
+        _scrollView = nil;
 }
 
-- (BOOL)autoscroll:(CPEvent)anEvent 
+@end
+
+@implementation CPClipView (CPClipViewPrivate)
+
+- (void)_scrollToPoint:(CGPoint)aPoint
+{ 
+    var proposedBounds = [self bounds], 
+        proposedVisibleRect,
+        newVisibleRect,
+        newBounds;
+
+    // Give documentView a chance to adjust its visible rectangle 
+    proposedBounds.origin = aPoint; 
+    proposedVisibleRect = [self convertRect:proposedBounds toView:_documentView];
+    newVisibleRect = [_documentView adjustScroll:proposedVisibleRect]; 
+    newBounds = [self convertRect:newVisibleRect fromView:_documentView]; 
+
+    [self scrollToPoint:newBounds.origin]; 
+}
+
+- (void)_documentViewChanged
 {
-    var bounds = [self bounds],
-        eventLocation = [self convertPoint:[anEvent locationInWindow] fromView:nil],
-        superview = [self superview],
-        deltaX = 0,
-        deltaY = 0;
+    [self setBoundsOrigin:[self constrainScrollPoint:[self bounds].origin]];
+    [_scrollView reflectScrolledClipView:self];
+}
 
-    if (CGRectContainsPoint(bounds, eventLocation))
-        return NO;
-
-    if (![superview isKindOfClass:[CPScrollView class]] || [superview hasVerticalScroller])
-    {
-        if (eventLocation.y < CGRectGetMinY(bounds))
-            deltaY = CGRectGetMinY(bounds) - eventLocation.y;
-        else if (eventLocation.y > CGRectGetMaxY(bounds))
-            deltaY = CGRectGetMaxY(bounds) - eventLocation.y;
-        if (deltaY < -bounds.size.height)
-            deltaY = -bounds.size.height;
-        if (deltaY > bounds.size.height)
-            deltaY = bounds.size.height;
-    }
-
-    if (![superview isKindOfClass:[CPScrollView class]] || [superview hasHorizontalScroller])
-    {
-        if (eventLocation.x < CGRectGetMinX(bounds))
-            deltaX = CGRectGetMinX(bounds) - eventLocation.x;
-        else if (eventLocation.x > CGRectGetMaxX(bounds))
-            deltaX = CGRectGetMaxX(bounds) - eventLocation.x;
-        if (deltaX < -bounds.size.width)
-            deltaX = -bounds.size.width;
-        if (deltaX > bounds.size.width)
-            deltaX = bounds.size.width;
-    }
-
-	return [self scrollToPoint:CGPointMake(bounds.origin.x - deltaX, bounds.origin.y - deltaY)];
+- (CGRect)_integralRect:(CGRect)aRect
+{
+    var origin = _CGPointMake(ROUND(_CGRectGetMinX(aRect)), ROUND(_CGRectGetMinY(aRect))),
+        bottomRight = _CGPointMake(ROUND(_CGRectGetMaxX(aRect)), ROUND(_CGRectGetMaxY(aRect))),
+        rect = _CGRectMake(origin.x, origin.y, bottomRight.x - origin.x, bottomRight.y - origin.y);
+        
+    return rect;
 }
 
 @end
 
 
 var CPClipViewDocumentViewKey = @"CPScrollViewDocumentView",
-    CPClipViewDrawsBackgroundKey = @"CPClipViewDrawsBackground";
+    CPClipViewDrawsBackgroundKey = @"CPClipViewDrawsBackground",
+    CPClipViewCopiesOnScrollKey = @"CPClipViewCopiesOnScroll";
 
 @implementation CPClipView (CPCoding)
 
 - (id)initWithCoder:(CPCoder)aCoder
 {
     if (self = [super initWithCoder:aCoder])
-    {
-        [self setDocumentView:[aCoder decodeObjectForKey:CPClipViewDocumentViewKey]];
-        
+    {        
         _drawsBackground = [aCoder decodeBoolForKey:CPClipViewDrawsBackgroundKey];
+        _copiesOnScroll = [aCoder decodeBoolForKey:CPClipViewCopiesOnScrollKey];
+        
+        [self setDocumentView:[aCoder decodeObjectForKey:CPClipViewDocumentViewKey]];
     }
     
     return self;
@@ -290,6 +538,7 @@ var CPClipViewDocumentViewKey = @"CPScrollViewDocumentView",
     
     [aCoder encodeObject:_documentView forKey:CPClipViewDocumentViewKey];
     [aCoder encodeBool:_drawsBackground forKey:CPClipViewDrawsBackgroundKey];
+    [aCoder encodeBool:_copiesOnScroll forKey:CPClipViewCopiesOnScrollKey];
 }
 
 @end
