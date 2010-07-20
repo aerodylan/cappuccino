@@ -59,6 +59,8 @@ CPTableColumnUserResizingMask   = 1 << 1;
     return [self initWithIdentifier:@""];
 }
 
+// Creating a CPTableColumn
+
 - (id)initWithIdentifier:(id)anIdentifier
 {
     self = [super init];
@@ -95,6 +97,7 @@ CPTableColumnUserResizingMask   = 1 << 1;
     return self;
 }
 
+// Setting the CPTableView
 
 - (void)setTableView:(CPTableView)aTableView
 {
@@ -106,10 +109,10 @@ CPTableColumnUserResizingMask   = 1 << 1;
     return _tableView;
 }
 
+// Controlling Size
+
 - (void)setWidth:(float)aWidth
 {
-    aWidth = +aWidth;
-
     if (_width === aWidth)
         return;
 
@@ -122,24 +125,12 @@ CPTableColumnUserResizingMask   = 1 << 1;
 
     _width = newWidth;
 
-    var tableView = [self tableView];
-
-    if (tableView)
+    if (_tableView)
     {
-        var index = [[tableView tableColumns] indexOfObjectIdenticalTo:self],
-            dirtyTableColumnRangeIndex = tableView._dirtyTableColumnRangeIndex;
-
-        if (dirtyTableColumnRangeIndex < 0)
-            tableView._dirtyTableColumnRangeIndex = index;
-        else
-            tableView._dirtyTableColumnRangeIndex = MIN(index,  tableView._dirtyTableColumnRangeIndex);
-
-        var rows = tableView._exposedRows,
-            columns = [CPIndexSet indexSetWithIndexesInRange:CPMakeRange(index, [tableView._exposedColumns lastIndex] - index + 1)];
-
-        // FIXME: Would be faster with some sort of -setNeedsDisplayInColumns: that updates a dirtyTableColumnForDisplay cache; then marked columns would relayout their data views at display time.
-        [tableView _layoutDataViewsInRows:rows columns:columns];
-        [tableView tile];
+        var index = [[_tableView tableColumns] indexOfObjectIdenticalTo:self];
+        
+        [_tableView _setNeedsRecalcColumnRangesStartingAtIndex:index];
+        [_tableView tile];
 
         if (!_disableResizingPosting)
             [self _postDidResizeNotificationWithOldWidth:oldWidth];
@@ -153,8 +144,6 @@ CPTableColumnUserResizingMask   = 1 << 1;
 
 - (void)setMinWidth:(float)aMinWidth
 {
-    aMinWidth = +aMinWidth;
-
     if (_minWidth === aMinWidth)
         return;
 
@@ -174,8 +163,6 @@ CPTableColumnUserResizingMask   = 1 << 1;
 
 - (void)setMaxWidth:(float)aMaxWidth
 {
-    aMaxWidth = +aMaxWidth;
-
     if (_maxWidth === aMaxWidth)
         return;
 
@@ -216,7 +203,8 @@ CPTableColumnUserResizingMask   = 1 << 1;
         [self setWidth:width];
 }
 
-//Setting Component Cells
+// Setting Component Cells
+
 - (void)setHeaderView:(CPView)aView
 {
     if (!aView)
@@ -236,7 +224,7 @@ CPTableColumnUserResizingMask   = 1 << 1;
 }
 
 /*!
-    This method set's the "prototype" view which will be used to create all table cells in this column.
+    This method sets the "prototype" view which will be used to create all table cells in this column.
     
     It creates a snapshot of aView, using keyed archiving, which is then copied over and over for each 
     individual cell that is shown. As a result, changes made after calling this method won't be reflected.
@@ -286,16 +274,11 @@ CPTableColumnUserResizingMask   = 1 << 1;
     var dataView = [self dataViewForRow:aRowIndex],
         dataViewUID = [dataView UID];
 
-    var x = [self tableView]._cachedDataViews[dataViewUID];
-    
-    if (x && x.length)
-        return x.pop();
-
-    // if we haven't cached an archive of the data view, do it now
+    // If we haven't cached an archive of the data view, do it now
     if (!_dataViewData[dataViewUID])
         _dataViewData[dataViewUID] = [CPKeyedArchiver archivedDataWithRootObject:dataView];
 
-    // unarchive the data view cache
+    // Unarchive the data view cache
     var newDataView = [CPKeyedUnarchiver unarchiveObjectWithData:_dataViewData[dataViewUID]];
     newDataView.identifier = dataViewUID;
     
@@ -305,7 +288,7 @@ CPTableColumnUserResizingMask   = 1 << 1;
     return newDataView;
 }
 
-//Setting the Identifier
+// Setting the Identifier
 
 /*
     Sets the receiver identifier to anIdentifier.
@@ -323,7 +306,7 @@ CPTableColumnUserResizingMask   = 1 << 1;
     return _identifier;
 }
 
-//Controlling Editability
+// Controlling Editability
 
 /*
     Controls whether the user can edit cells in the receiver by double-clicking them.
@@ -342,7 +325,8 @@ CPTableColumnUserResizingMask   = 1 << 1;
     return _isEditable;
 }
 
-//Sorting
+// Sorting
+
 - (void)setSortDescriptorPrototype:(CPSortDescriptor)aSortDescriptor
 {
     _sortDescriptorPrototype = aSortDescriptor;
@@ -353,18 +337,19 @@ CPTableColumnUserResizingMask   = 1 << 1;
     return _sortDescriptorPrototype;
 }
 
-//Setting Column Visibility
+// Setting Column Visibility
 
 - (void)setHidden:(BOOL)shouldBeHidden
 {
     shouldBeHidden = !!shouldBeHidden
+    
     if (_isHidden === shouldBeHidden)
         return;
     
     _isHidden = shouldBeHidden;
     
-    [[self headerView] setHidden:shouldBeHidden];
-    [[self tableView] _tableColumnVisibilityDidChange:self];
+    [_headerView setHidden:shouldBeHidden];
+    [_tableView _tableColumnVisibilityDidChange:self];
 }
 
 - (BOOL)isHidden
@@ -372,7 +357,7 @@ CPTableColumnUserResizingMask   = 1 << 1;
     return _isHidden;
 }
 
-//Setting Tool Tips
+// Setting Tool Tips
 
 /*
     Sets the tooltip string that is displayed when the cursor pauses over the
@@ -453,14 +438,9 @@ CPTableColumnUserResizingMask   = 1 << 1;
     }
 }
 
-//- (void)objectValue
-//{
-//    return nil;
-//}
-
 - (void)setValue:(CPArray)content
 {
-    [[self tableView] reloadData];
+    [_tableView reloadData];
 }
 
 @end
