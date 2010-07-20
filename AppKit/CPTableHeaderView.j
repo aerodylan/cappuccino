@@ -37,9 +37,7 @@
     self = [super initWithFrame:frame];
     
     if (self)
-    {   
         [self _init];
-    }
 
     return self;
 }
@@ -238,19 +236,37 @@ var CPTableHeaderViewResizeZone = 3.0,
     return self;
 }
 
-- (void)viewDidMoveToWindow
+// Checking Altered Columns
+
+- (CPInteger)draggedColumn
 {
-    [super viewDidMoveToWindow];
-    
-    [[self window] setAcceptsMouseMovedEvents:YES];
+    return _isDragging ? _activeColumn : -1;
 }
 
-- (int)columnAtPoint:(CGPoint)aPoint
+- (float)draggedDistance
 {
-    return [_tableView columnAtPoint:_CGPointMake(aPoint.x, aPoint.y)];
+    if (_isDragging)
+        return (_CGRectGetMinX(_columnDragClipView) - _columnMouseDownLocation.x);
+    else
+        return -1;
 }
 
-- (CGRect)headerRectOfColumn:(int)aColumnIndex
+- (CPInteger)resizedColumn
+{
+    if (_isResizing)
+        return _activeColumn;
+    else
+        return -1;
+}
+
+// Utility Methods
+
+- (CPInteger)columnAtPoint:(CGPoint)aPoint
+{
+    return [_tableView columnAtPoint:aPoint];
+}
+
+- (CGRect)headerRectOfColumn:(CPInteger)aColumnIndex
 {
     var headerRect = [self bounds],
         columnRect = [_tableView rectOfColumn:aColumnIndex];
@@ -261,43 +277,34 @@ var CPTableHeaderViewResizeZone = 3.0,
     return headerRect;
 }
 
-- (CGRect)_cursorRectForColumn:(int)column
+// CPView Overrides
+
+- (void)viewDidMoveToWindow
 {
-    if (column == -1 || !([_tableView._tableColumns[column] resizingMask] & CPTableColumnUserResizingMask))
-        return _CGRectMakeZero();
-
-    var rect = [self headerRectOfColumn:column];
-
-    rect.origin.x = (_CGRectGetMaxX(rect) - CPTableHeaderViewResizeZone) - 1.0;
-    rect.size.width = (CPTableHeaderViewResizeZone * 2.0) + 1.0;  // + 1 for resize line
+    [super viewDidMoveToWindow];
     
-    return rect;
+    [[self window] setAcceptsMouseMovedEvents:YES];
 }
 
-- (void)_setPressedColumn:(CPInteger)column
-{
-    if (_pressedColumn === column)
-        return;
+- (void)layoutSubviews
+{    
+    var tableColumns = [_tableView tableColumns],
+        count = [tableColumns count];    
+
+    for (var i = 0; i < count; i++) 
+    {
+        var column = [tableColumns objectAtIndex:i],
+            headerView = [column headerView],
+            frame = [self headerRectOfColumn:i];
         
-    if (_pressedColumn != -1)
-    {
-        var headerView = [_tableView._tableColumns[_pressedColumn] headerView];
-        [headerView unsetThemeState:CPThemeStateHighlighted];
-    }
+        [headerView setFrame:frame];
 
-    if (column != -1)
-    {
-        var headerView = [_tableView._tableColumns[column] headerView];
-        [headerView setThemeState:CPThemeStateHighlighted];
+        if ([headerView superview] != self)
+            [self addSubview:headerView];
     }
-    else
-    {
-        // Once the mouse leaves the pressed column, it can no longer drag
-        _canDragColumn = NO;
-    }
-
-    _pressedColumn = column;
 }
+
+// CPResponder Overrides
 
 - (void)mouseDown:(CPEvent)theEvent
 {
@@ -374,7 +381,79 @@ var CPTableHeaderViewResizeZone = 3.0,
     _activeColumn = -1;
 }
 
-- (BOOL)_shouldDragTableColumn:(int)aColumnIndex at:(CGPoint)aPoint
+- (void)mouseEntered:(CPEvent)theEvent
+{
+    var location = [theEvent globalLocation];
+    
+    if (_CGPointEqualToPoint(location, _mouseEnterExitLocation))
+        return;
+        
+    _mouseEnterExitLocation = location;
+    
+    [self _updateResizeCursor:theEvent];
+}
+
+- (void)mouseMoved:(CPEvent)theEvent
+{
+    [self _updateResizeCursor:theEvent];
+}
+
+- (void)mouseExited:(CPEvent)theEvent
+{
+    var location = [theEvent globalLocation];
+    
+    if (_CGPointEqualToPoint(location, _mouseEnterExitLocation))
+        return;
+        
+    _mouseEnterExitLocation = location;
+    
+    // FIXME: we should use CPCursor push/pop (if previous currentCursor != arrow).
+    [[CPCursor arrowCursor] set];
+}
+
+@end
+
+@implementation CPTableHeaderView (CPTableHeaderViewPrivate)
+
+- (CGRect)_cursorRectForColumn:(CPInteger)column
+{
+    if (column == -1 || !([_tableView._tableColumns[column] resizingMask] & CPTableColumnUserResizingMask))
+        return _CGRectMakeZero();
+
+    var rect = [self headerRectOfColumn:column];
+
+    rect.origin.x = (_CGRectGetMaxX(rect) - CPTableHeaderViewResizeZone) - 1.0;
+    rect.size.width = (CPTableHeaderViewResizeZone * 2.0) + 1.0;  // + 1 for resize line
+    
+    return rect;
+}
+
+- (void)_setPressedColumn:(CPInteger)column
+{
+    if (_pressedColumn === column)
+        return;
+        
+    if (_pressedColumn != -1)
+    {
+        var headerView = [_tableView._tableColumns[_pressedColumn] headerView];
+        [headerView unsetThemeState:CPThemeStateHighlighted];
+    }
+
+    if (column != -1)
+    {
+        var headerView = [_tableView._tableColumns[column] headerView];
+        [headerView setThemeState:CPThemeStateHighlighted];
+    }
+    else
+    {
+        // Once the mouse leaves the pressed column, it can no longer drag
+        _canDragColumn = NO;
+    }
+
+    _pressedColumn = column;
+}
+
+- (BOOL)_shouldDragTableColumn:(CPInteger)aColumnIndex at:(CGPoint)aPoint
 {
     return _canDragColumn && [_tableView allowsColumnReordering] && ABS(aPoint.x - _mouseDownLocation.x) >= CPTableHeaderViewDragTolerance;
 }
@@ -382,7 +461,7 @@ var CPTableHeaderViewResizeZone = 3.0,
 - (void)_autoscroll:(CPEvent)theEvent localLocation:(CGPoint)theLocation
 {
     // Constrain the y coordinate so we don't autoscroll vertically
-    var constrainedLocation = _CGPointMake(theLocation.x, _CGRectGetMinY([_tableView _exposedRect])),
+    var constrainedLocation = _CGPointMake(theLocation.x, _CGRectGetMinY([_tableView visibleRect])),
         constrainedEvent = [CPEvent mouseEventWithType:CPLeftMouseDragged
                                              location:[self convertPoint:constrainedLocation toView:nil]
                                         modifierFlags:[theEvent modifierFlags]
@@ -416,16 +495,16 @@ var CPTableHeaderViewResizeZone = 3.0,
 - (CGPoint)_constrainDragPoint:(CGPoint)aPoint
 {
     // This effectively clamps the value between the minimum and maximum
-    var exposedRect = [_tableView _exposedRect],
+    var visibleRect = [_tableView visibleRect],
         lastColumnRect = [self _headerRectOfLastVisibleColumn],
         activeColumnRect = [self headerRectOfColumn:_activeColumn],
-        maxX = _CGRectGetMaxX(lastColumnRect) - _CGRectGetWidth(activeColumnRect) - _CGRectGetMinX(exposedRect),
-        point = _CGPointMake(MAX(MIN(aPoint.x, maxX), -CGRectGetMinX(exposedRect)), aPoint.y);
+        maxX = _CGRectGetMaxX(lastColumnRect) - _CGRectGetWidth(activeColumnRect) - _CGRectGetMinX(visibleRect),
+        point = _CGPointMake(MAX(MIN(aPoint.x, maxX), -CGRectGetMinX(visibleRect)), aPoint.y);
 
     return point;
 }
 
-- (void)_moveColumn:(int)aFromIndex toColumn:(int)aToIndex
+- (void)_moveColumn:(CPInteger)aFromIndex toColumn:(CPInteger)aToIndex
 {
     [_tableView moveColumn:aFromIndex toColumn:aToIndex];
     _activeColumn = aToIndex;
@@ -436,17 +515,12 @@ var CPTableHeaderViewResizeZone = 3.0,
     [self setNeedsDisplay:YES];
 }
 
-- (int)draggedColumn
-{
-    return isDragging ? _activeColumn : -1;
-}
-
 - (BOOL)isDragging
 {
     return _isDragging;
 }
 
-- (void)_startDraggingTableColumn:(int)aColumnIndex at:(CGPoint)aPoint
+- (void)_startDraggingTableColumn:(CPInteger)aColumnIndex at:(CGPoint)aPoint
 {
     _isDragging = YES;
     _columnDragView = [_tableView _dragViewForColumn:aColumnIndex];
@@ -454,7 +528,8 @@ var CPTableHeaderViewResizeZone = 3.0,
 
     // Create a new clip view for the drag view that clips to the header + visible content
     var headerHeight = _CGRectGetHeight([self frame]),
-        contentFrame = [[[self enclosingScrollView] contentView] frame];
+        scrollView = [self enclosingScrollView],
+        contentFrame = [[scrollView contentView] frame];
     
     contentFrame.origin.y -= headerHeight;
     contentFrame.size.height += headerHeight;
@@ -464,7 +539,7 @@ var CPTableHeaderViewResizeZone = 3.0,
     [_columnDragClipView addSubview:_columnDragView];
     
     // Insert the clip view above the table header (and content)
-    [[self enclosingScrollView] addSubview:_columnDragClipView positioned:CPWindowAbove relativeTo:self];    
+    [scrollView addSubview:_columnDragClipView positioned:CPWindowAbove relativeTo:self];    
     
     // Hide the underlying column header subviews, we just want to draw the chrome
     var headerView = [[[_tableView tableColumns] objectAtIndex:aColumnIndex] headerView];
@@ -485,7 +560,7 @@ var CPTableHeaderViewResizeZone = 3.0,
     [self setNeedsDisplay:YES];
 }
 
-- (void)_dragTableColumn:(int)aColumnIndex to:(CGPoint)aPoint
+- (void)_dragTableColumn:(CPInteger)aColumnIndex to:(CGPoint)aPoint
 {
     var delta = aPoint.x - _previousTrackingLocation.x,
         columnPoint = [_columnDragHeaderView convertPoint:aPoint fromView:self];
@@ -500,7 +575,10 @@ var CPTableHeaderViewResizeZone = 3.0,
     
         // When the edge of the dragged column passes the midpoint of an adjacent column, they swap
         var hoverPoint = _CGPointMakeCopy(aPoint);
-
+        
+        // The drag frame is in content view coordinates, we need it to be in our coordinates
+        dragFrame = [self convertRect:dragFrame fromView:[_columnDragView superview]];
+        
         if (delta > 0)
             hoverPoint.x = _CGRectGetMaxX(dragFrame);
         else
@@ -523,7 +601,7 @@ var CPTableHeaderViewResizeZone = 3.0,
     _previousTrackingLocation = aPoint;
 }
 
-- (void)_stopDraggingTableColumn:(int)aColumnIndex
+- (void)_stopDraggingTableColumn:(CPInteger)aColumnIndex
 {
     _isDragging = NO;
 
@@ -536,13 +614,17 @@ var CPTableHeaderViewResizeZone = 3.0,
 
     if (_tableView._draggedColumnIsSelected)
         [headerView setThemeState:CPThemeStateSelected];
+        
+    var columnRect = [_tableView rectOfColumn:aColumnIndex];
+    
+    [_tableView setNeedsDisplayInRect:columnRect];
     
     [[CPCursor arrowCursor] set];
 
     [self setNeedsDisplay:YES];
 }
 
-- (BOOL)_shouldResizeTableColumn:(int)aColumnIndex at:(CGPoint)aPoint
+- (BOOL)_shouldResizeTableColumn:(CPInteger)aColumnIndex at:(CGPoint)aPoint
 {
     if (_isResizing)
         return YES;
@@ -550,10 +632,11 @@ var CPTableHeaderViewResizeZone = 3.0,
     return [_tableView allowsColumnResizing] && _CGRectContainsPoint([self _cursorRectForColumn:aColumnIndex], aPoint);
 }
 
-- (void)_startResizingTableColumn:(int)aColumnIndex at:(CGPoint)aPoint
+- (void)_startResizingTableColumn:(CPInteger)aColumnIndex at:(CGPoint)aPoint
 {
     _isResizing = YES;
     _previousTrackingLocation = aPoint;
+    _activeColumn = aColumnIndex;
 
     var tableColumn = [[_tableView tableColumns] objectAtIndex:aColumnIndex];
 
@@ -563,7 +646,7 @@ var CPTableHeaderViewResizeZone = 3.0,
     [_tableView setDisableAutomaticResizing:YES];
 }
 
-- (void)_continueResizingTableColumn:(int)aColumnIndex at:(CGPoint)aPoint
+- (void)_continueResizingTableColumn:(CPInteger)aColumnIndex at:(CGPoint)aPoint
 {
     var tableColumn = [[_tableView tableColumns] objectAtIndex:aColumnIndex],
         delta = aPoint.x - _previousTrackingLocation.x,
@@ -599,7 +682,7 @@ var CPTableHeaderViewResizeZone = 3.0,
     _previousTrackingLocation = aPoint;
 }
 
-- (void)_stopResizingTableColumn:(int)aColumnIndex
+- (void)_stopResizingTableColumn:(CPInteger)aColumnIndex
 {
     var tableColumn = [[_tableView tableColumns] objectAtIndex:aColumnIndex];
     
@@ -642,55 +725,7 @@ var CPTableHeaderViewResizeZone = 3.0,
         [[CPCursor arrowCursor] set];
 }
 
-- (void)mouseEntered:(CPEvent)theEvent
-{
-    var location = [theEvent globalLocation];
-    
-    if (_CGPointEqualToPoint(location, _mouseEnterExitLocation))
-        return;
-        
-    _mouseEnterExitLocation = location;
-    
-    [self _updateResizeCursor:theEvent];
-}
-
-- (void)mouseMoved:(CPEvent)theEvent
-{
-    [self _updateResizeCursor:theEvent];
-}
-
-- (void)mouseExited:(CPEvent)theEvent
-{
-    var location = [theEvent globalLocation];
-    
-    if (_CGPointEqualToPoint(location, _mouseEnterExitLocation))
-        return;
-        
-    _mouseEnterExitLocation = location;
-    
-    // FIXME: we should use CPCursor push/pop (if previous currentCursor != arrow).
-    [[CPCursor arrowCursor] set];
-}
-
-- (void)layoutSubviews
-{
-    var tableColumns = [_tableView tableColumns],
-        count = [tableColumns count];    
-
-    for (var i = 0; i < count; i++) 
-    {
-        var column = [tableColumns objectAtIndex:i],
-            headerView = [column headerView],
-            frame = [self headerRectOfColumn:i];
-        
-        [headerView setFrame:frame];
-
-        if ([headerView superview] != self)
-            [self addSubview:headerView];
-    }
-}
-
-@end
+@end // CPTableView (CPTableViewPrivate)
 
 var CPTableHeaderViewTableViewKey = @"CPTableHeaderViewTableViewKey";
 
