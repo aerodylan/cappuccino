@@ -4037,14 +4037,19 @@ var CPDropOperationIndicatorHeight = 8;
         return;
     }
 
-    var context = [[CPGraphicsContext currentContext] graphicsPort];
+    var context = [[CPGraphicsContext currentContext] graphicsPort],
+        highlightColor = [CPColor colorWithHexString:@"4886ca"];
 
-    CGContextSetStrokeColor(context, [CPColor colorWithHexString:@"4886ca"]);
-    CGContextSetLineWidth(context, 3);
+    CGContextSetStrokeColor(context, highlightColor);
 
     if (currentRow === -1)
     {
-        CGContextStrokeRect(context, [self bounds]);
+        var borderWidth = 5.0,
+            strokeRect = _CGRectInset([self bounds], borderWidth / 2.0, borderWidth / 2.0);
+            
+        CGContextSetLineWidth(context, borderWidth);
+        CGContextSetStrokeColor(context, [highlightColor colorWithAlphaComponent:0.8]);
+        CGContextStrokeRect(context, strokeRect);
     }
     else if (dropOperation === CPTableViewDropOn)
     {
@@ -4061,10 +4066,11 @@ var CPDropOperationIndicatorHeight = 8;
         }
         else
         {
-            CGContextSetFillColor(context, [CPColor colorWithRed:72/255.0 green:134/255.0 blue:202/255.0 alpha:0.25]);
+            CGContextSetFillColor(context, [highlightColor colorWithAlphaComponent:0.25]);
             CGContextFillRoundedRectangleInRect(context, newRect, 8, YES, YES, YES, YES);
         }
         
+        CGContextSetLineWidth(context, 3);
         CGContextStrokeRoundedRectangleInRect(context, newRect, 8, YES, YES, YES, YES);
     }
     else if (dropOperation === CPTableViewDropAbove)
@@ -4077,7 +4083,7 @@ var CPDropOperationIndicatorHeight = 8;
         if ([selectedRows containsIndex:currentRow - 1] || [selectedRows containsIndex:currentRow])
             [self _drawDropAboveIndicatorWithContext:context rect:aRect color:[CPColor whiteColor] width:4];
             
-        [self _drawDropAboveIndicatorWithContext:context rect:aRect color:[CPColor colorWithHexString:@"4886ca"] width:3];
+        [self _drawDropAboveIndicatorWithContext:context rect:aRect color:highlightColor width:3];
     }
 }
 
