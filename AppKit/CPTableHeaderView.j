@@ -222,8 +222,6 @@ var CPTableHeaderViewResizeZone = 3.0,
     _canDragColumn = NO;
 
     _columnOldWidth = 0.0;
-
-    [self setBackgroundColor:[CPColor colorWithPatternImage:CPAppKitImage("tableview-headerview.png", _CGSizeMake(1.0, 23.0))]];
 }
 
 - (id)initWithFrame:(CGRect)aFrame
